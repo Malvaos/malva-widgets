@@ -1,0 +1,286 @@
+// Primitives every other file builds on: icon, text styles, surfaces, bars, pills.
+
+import { Theme } from "theme.slint";
+import { IconDef, Icons } from "icons.slint";
+
+export { IconDef, Icons }
+
+// ---------------------------------------------------------------------------
+// Icon: Font Awesome solid path data drawn as a vector, colored with `color`.
+// ---------------------------------------------------------------------------
+export component Icon inherits Rectangle {
+    in property <IconDef> icon;
+    in property <length> size: 14px;
+    in property <brush> tint: Theme.text;
+    width: root.size * root.icon.w / 512;
+    height: root.size;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: root.icon.w;
+        viewbox-height: 512;
+        commands: root.icon.d;
+        fill: root.tint;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Text styles from the type scale (Foundations board).
+// ---------------------------------------------------------------------------
+export enum TextKind { number-xl, title1, title2, label, body, secondary, caption, overline, mono, small, tiny }
+
+export component Txt inherits Text {
+    in property <TextKind> kind: TextKind.body;
+    font-family: root.kind == TextKind.mono ? Theme.mono : Theme.font;
+    color: root.kind == TextKind.secondary ? Theme.sub
+        : root.kind == TextKind.caption || root.kind == TextKind.overline || root.kind == TextKind.small || root.kind == TextKind.tiny ? Theme.muted
+        : root.kind == TextKind.mono ? Theme.sub
+        : Theme.text;
+    font-size: root.kind == TextKind.number-xl ? 36px
+        : root.kind == TextKind.title1 ? 20px
+        : root.kind == TextKind.title2 ? 17px
+        : root.kind == TextKind.label ? 14px
+        : root.kind == TextKind.body ? 14px
+        : root.kind == TextKind.secondary ? 13px
+        : root.kind == TextKind.caption ? 12.5px
+        : root.kind == TextKind.overline ? 11.5px
+        : root.kind == TextKind.small ? 12px
+        : root.kind == TextKind.tiny ? 11px
+        : 12px;
+    font-weight: root.kind == TextKind.number-xl || root.kind == TextKind.title1 || root.kind == TextKind.title2 || root.kind == TextKind.label || root.kind == TextKind.overline ? 600 : 400;
+    letter-spacing: root.kind == TextKind.overline ? 0.6px : 0px;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+// ---------------------------------------------------------------------------
+// Surfaces
+// ---------------------------------------------------------------------------
+export enum Elevation { none, widget, hover, menu, dialog }
+
+// A panel with a 1 px edge and one soft shadow. The farther it floats, the longer the shadow.
+export component Surface inherits Rectangle {
+    in property <Elevation> elevation: Elevation.widget;
+    in property <length> radius: Theme.r-card;
+    in property <bool> glass: false;
+    in property <bool> outline: true;
+    background: root.glass ? Theme.panel-glass : Theme.panel;
+    border-radius: root.radius;
+    border-width: root.outline ? 1px : 0px;
+    border-color: Theme.line;
+    drop-shadow-color: root.elevation == Elevation.none ? transparent
+        : root.elevation == Elevation.dialog ? Theme.shadow-dialog
+        : root.elevation == Elevation.menu ? Theme.shadow-menu
+        : Theme.shadow;
+    drop-shadow-blur: root.elevation == Elevation.dialog ? 56px
+        : root.elevation == Elevation.menu ? 40px
+        : root.elevation == Elevation.hover ? 34px
+        : root.elevation == Elevation.widget ? 24px : 0px;
+    drop-shadow-offset-y: root.elevation == Elevation.dialog ? 24px
+        : root.elevation == Elevation.menu ? 16px
+        : root.elevation == Elevation.hover ? 14px
+        : root.elevation == Elevation.widget ? 8px : 0px;
+    animate drop-shadow-blur { duration: Theme.dur-fast; easing: Theme.ease-std; }
+    animate drop-shadow-offset-y { duration: Theme.dur-fast; easing: Theme.ease-std; }
+    @children
+}
+
+export component Hairline inherits Rectangle {
+    height: 1px;
+    background: Theme.line;
+}
+
+// Dashed rectangle outline (Slint has no dashed borders), used for edit mode and drop targets.
+export component DashedBorder inherits Rectangle {
+    in property <color> ink: Theme.focus;
+    in property <length> radius: 10px;
+    in property <length> thickness: 2px;
+    in property <length> dash: 6px;
+    in property <length> gap: 4px;
+    property <length> pitch: root.dash + root.gap;
+    property <length> run-x: root.width - 2 * root.radius;
+    property <length> run-y: root.height - 2 * root.radius;
+    // straight runs
+    for i in Math.max(0, Math.floor(root.run-x / root.pitch) + 1): Rectangle {
+        x: root.radius + i * root.pitch;
+        y: 0px;
+        width: Math.min(root.dash, root.radius + root.run-x - self.x);
+        height: root.thickness;
+        background: root.ink;
+    }
+    for i in Math.max(0, Math.floor(root.run-x / root.pitch) + 1): Rectangle {
+        x: root.radius + i * root.pitch;
+        y: root.height - root.thickness;
+        width: Math.min(root.dash, root.radius + root.run-x - self.x);
+        height: root.thickness;
+        background: root.ink;
+    }
+    for i in Math.max(0, Math.floor(root.run-y / root.pitch) + 1): Rectangle {
+        x: 0px;
+        y: root.radius + i * root.pitch;
+        width: root.thickness;
+        height: Math.min(root.dash, root.radius + root.run-y - self.y);
+        background: root.ink;
+    }
+    for i in Math.max(0, Math.floor(root.run-y / root.pitch) + 1): Rectangle {
+        x: root.width - root.thickness;
+        y: root.radius + i * root.pitch;
+        width: root.thickness;
+        height: Math.min(root.dash, root.radius + root.run-y - self.y);
+        background: root.ink;
+    }
+    // corners: four solid quarter arcs
+    Path {
+        x: 0px; y: 0px; width: root.radius; height: root.radius;
+        viewbox-width: 1; viewbox-height: 1;
+        commands: "M0 1 A1 1 0 0 1 1 0";
+        stroke: root.ink; stroke-width: root.thickness; fill: transparent;
+    }
+    Path {
+        x: root.width - root.radius; y: 0px; width: root.radius; height: root.radius;
+        viewbox-width: 1; viewbox-height: 1;
+        commands: "M0 0 A1 1 0 0 1 1 1";
+        stroke: root.ink; stroke-width: root.thickness; fill: transparent;
+    }
+    Path {
+        x: 0px; y: root.height - root.radius; width: root.radius; height: root.radius;
+        viewbox-width: 1; viewbox-height: 1;
+        commands: "M0 0 A1 1 0 0 0 1 1";
+        stroke: root.ink; stroke-width: root.thickness; fill: transparent;
+    }
+    Path {
+        x: root.width - root.radius; y: root.height - root.radius; width: root.radius; height: root.radius;
+        viewbox-width: 1; viewbox-height: 1;
+        commands: "M0 1 A1 1 0 0 0 1 0";
+        stroke: root.ink; stroke-width: root.thickness; fill: transparent;
+    }
+}
+
+// Keyboard focus: a 2 px ring with a 2 px gap, drawn outside its parent.
+// Put it as the last child of the control; it fills the control and draws around it.
+export component FocusRing inherits Rectangle {
+    in property <bool> active: false;
+    in property <length> corner: 10px;
+    background: transparent;
+    Rectangle {
+        x: -4px;
+        y: -4px;
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        border-radius: root.corner + 4px;
+        border-width: root.active ? 2px : 0px;
+        border-color: Theme.focus;
+        background: transparent;
+        animate border-width { duration: Theme.dur-fast; easing: Theme.ease-std; }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Small display parts
+// ---------------------------------------------------------------------------
+export component Pill inherits Rectangle {
+    in property <string> text;
+    in property <color> fill: Theme.chip;
+    in property <color> fg: Theme.muted;
+    in property <length> pill-height: 22px;
+    in property <length> font-size: 11px;
+    in property <length> side: 8px;
+    height: root.pill-height;
+    width: label.preferred-width + 2 * root.side;
+    border-radius: root.pill-height / 2;
+    background: root.fill;
+    label := Text {
+        x: root.side;
+        height: 100%;
+        text: root.text;
+        color: root.fg;
+        font-family: Theme.font;
+        font-size: root.font-size;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+}
+
+// Rounded square holding one icon, tinted with a resource color.
+export component IconTile inherits Rectangle {
+    in property <IconDef> icon;
+    in property <color> tint: Theme.accent;
+    in property <color> soft: Theme.fade(root.tint, 0.14);
+    in property <length> tile: 28px;
+    in property <length> glyph: 14px;
+    in property <length> radius: 8px;
+    width: root.tile;
+    height: root.tile;
+    border-radius: root.radius;
+    background: root.soft;
+    Icon {
+        icon: root.icon;
+        size: root.glyph;
+        tint: root.tint;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+// Linear progress bar.
+export component Bar inherits Rectangle {
+    in property <float> value: 0.5;
+    in property <color> fill: Theme.accent;
+    in property <color> track: Theme.track;
+    in property <length> thickness: 6px;
+    height: root.thickness;
+    border-radius: root.thickness / 2;
+    background: root.track;
+    clip: true;
+    Rectangle {
+        x: 0px;
+        width: parent.width * Math.clamp(root.value, 0, 1);
+        height: 100%;
+        border-radius: parent.border-radius;
+        background: root.fill;
+        animate width { duration: Theme.dur-base; easing: Theme.ease-std; }
+    }
+}
+
+// Spinning ring for busy states. Keeps turning on its own.
+export component Spinner inherits Rectangle {
+    in property <length> size: 16px;
+    in property <color> ink: Theme.text;
+    in property <length> stroke: 2px;
+    width: root.size;
+    height: root.size;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        commands: "M50 8 A42 42 0 1 1 8 50";
+        stroke: root.ink;
+        stroke-width: root.stroke;
+        stroke-line-cap: round;
+        fill: transparent;
+        transform-rotation: mod(animation-tick() / 800ms, 1) * 360deg;
+    }
+}
+
+// Key cap used in tooltips and menus.
+export component Kbd inherits Rectangle {
+    in property <string> text;
+    in property <color> fill: Theme.chip;
+    in property <color> fg: Theme.muted;
+    height: 20px;
+    width: Math.max(20px, label.preferred-width + 12px);
+    border-radius: 5px;
+    background: root.fill;
+    label := Text {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        color: root.fg;
+        font-family: Theme.font;
+        font-size: 11px;
+        font-weight: 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

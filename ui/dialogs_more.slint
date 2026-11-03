@@ -1,0 +1,889 @@
+// More dialogs: progress (copy, scan, steps, done, failed), forms (rename, preset, run task,
+// feedback), lists (force quit, eject, shutdown, update), About and the crash report.
+// All of them work: pause the copy, type in the forms, tick the apps.
+
+import { Theme, Brand } from "theme.slint";
+import { Icon, IconDef, Icons, Spinner, DashedBorder, Surface, Elevation } from "base.slint";
+import { Btn, BtnKind } from "controls.slint";
+import { Field, Segmented } from "fields.slint";
+import { DialogCard, DlgButton, DlgBox, DlgCode, DlgCheck } from "dialogs.slint";
+import { Fmt } from "widgets/parts.slint";
+
+// ---------------------------------------------------------------------------
+// Shared pieces
+// ---------------------------------------------------------------------------
+
+// What a dialog turns into after it was closed: a dashed box with a way back.
+export component DlgClosed inherits Rectangle {
+    callback reopen();
+    height: 132px;
+    border-radius: 16px;
+    background: Theme.panel;
+    DashedBorder { x: 0px; y: 0px; width: parent.width; height: parent.height; radius: 16px; ink: Theme.rule; thickness: 2px; dash: 7px; gap: 5px; }
+    Text { x: 0px; y: 28px; width: parent.width; height: 20px; text: "Dialog closed"; color: Theme.muted; font-size: 13px; horizontal-alignment: center; vertical-alignment: center; }
+    Btn { x: (parent.width - self.width) / 2; y: 58px; text: "Show it again"; clicked => { root.reopen(); } }
+}
+
+// "Details" row that opens and closes a part of the dialog.
+component DlgDisclose inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> open: false;
+    in property <length> indent: 66px;
+    height: 8px + 44px;
+    Rectangle {
+        x: root.indent;
+        y: 8px;
+        width: 12px + 12px + 8px + lbl.preferred-width + 12px;
+        height: 44px;
+        border-radius: 10px;
+        background: ta.has-hover ? Theme.hover : transparent;
+        accessible-role: AccessibleRole.button;
+        accessible-label: root.text;
+        accessible-expanded: root.open;
+        Icon {
+            x: 12px;
+            y: (parent.height - self.height) / 2;
+            icon: Icons.chevron-right;
+            size: 12px;
+            tint: Theme.text;
+            transform-rotation: root.open ? 90deg : 0deg;
+            animate transform-rotation { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        }
+        lbl := Text { x: 32px; y: 0px; height: parent.height; text: root.text; color: Theme.text; font-size: 13.5px; font-weight: 500; vertical-alignment: center; }
+        ta := TouchArea {
+            mouse-cursor: MouseCursor.pointer;
+            clicked => { root.open = !root.open; }
+        }
+    }
+}
+
+// Check or radio row with a title and a second line of help.
+component DlgOption inherits Rectangle {
+    in property <bool> checked: false;
+    in property <bool> radio: false;
+    in property <string> label;
+    in property <string> help;
+    in property <bool> has-lead: false;
+    callback toggled();
+    property <length> row-h: Math.max(56px, 29px + hp.preferred-height + 10px);
+    height: 4px + root.row-h;
+    Rectangle {
+        x: 12px;
+        y: 4px;
+        width: parent.width - 24px;
+        height: root.row-h;
+        border-radius: 10px;
+        background: ta.has-hover ? Theme.hover : transparent;
+        accessible-role: AccessibleRole.checkbox;
+        accessible-checked: root.checked;
+        accessible-label: root.label;
+        if !root.radio: DlgBox { x: 12px; y: 11px; checked: root.checked; }
+        if root.radio: Rectangle {
+            x: 12px;
+            y: 11px;
+            width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            border-width: 2px;
+            border-color: root.checked ? Theme.ctl : Theme.field;
+            if root.checked: Rectangle { x: 3px; y: 3px; width: 10px; height: 10px; border-radius: 5px; background: Theme.ctl; }
+        }
+        if root.has-lead: Icon { x: 44px; y: 14px; icon: Icons.shield-halved; size: 13px; tint: Theme.warn; }
+        Text { x: root.has-lead ? 64px : 44px; y: 8px; width: parent.width - 56px; height: 22px; text: root.label; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+        hp := Text { x: 44px; y: 29px; width: parent.width - 56px; text: root.help; wrap: TextWrap.word-wrap; color: Theme.muted; font-size: 12.5px; }
+        ta := TouchArea {
+            mouse-cursor: MouseCursor.pointer;
+            clicked => { root.toggled(); }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Progress
+// ---------------------------------------------------------------------------
+
+// Label and percent, the bar, and two small numbers under it.
+component DlgBar inherits Rectangle {
+    in property <string> label;
+    in property <string> pct-text;
+    in property <float> fraction: 0;
+    in property <color> ink: Theme.accent;
+    in property <string> left-text;
+    in property <string> right-text;
+    height: 16px + 20px + 8px + 10px + 8px + 19px;
+    Text { x: 78px; y: 16px; width: root.width - 78px - 24px - 56px; height: 20px; text: root.label; color: Theme.text; font-size: 13.5px; vertical-alignment: center; overflow: elide; }
+    Text { x: root.width - 24px - 56px; y: 16px; width: 56px; height: 20px; text: root.pct-text; color: Theme.text; font-size: 13.5px; font-weight: 600; horizontal-alignment: right; vertical-alignment: center; }
+    Rectangle {
+        x: 78px;
+        y: 44px;
+        width: root.width - 102px;
+        height: 10px;
+        border-radius: 5px;
+        background: Theme.track;
+        clip: true;
+        accessible-role: AccessibleRole.progress-indicator;
+        accessible-value: root.pct-text;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * Math.min(1, Math.max(0, root.fraction));
+            height: parent.height;
+            border-radius: 5px;
+            background: root.ink;
+            animate width { duration: 400ms; easing: linear; }
+        }
+    }
+    lt := Text { x: 78px; y: 62px; height: 19px; text: root.left-text; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+    Text { x: 78px + lt.preferred-width + 12px; y: 62px; width: root.width - 78px - 24px - lt.preferred-width - 12px; height: 19px; text: root.right-text; color: Theme.muted; font-size: 12.5px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+}
+
+// A bar with no end: a segment slides across.
+component DlgIndet inherits Rectangle {
+    in property <string> caption;
+    property <float> ph: Math.mod(animation-tick() / 1500ms, 1);
+    height: 16px + 10px + 8px + 19px;
+    Rectangle {
+        x: 78px;
+        y: 16px;
+        width: root.width - 102px;
+        height: 10px;
+        border-radius: 5px;
+        background: Theme.track;
+        clip: true;
+        accessible-role: AccessibleRole.progress-indicator;
+        accessible-label: "Working, no estimate";
+        Rectangle {
+            x: -parent.width * 0.36 + parent.width * 1.36 * root.ph;
+            y: 0px;
+            width: parent.width * 0.36;
+            height: parent.height;
+            border-radius: 5px;
+            background: Theme.accent;
+        }
+    }
+    Text { x: 78px; y: 34px; width: root.width - 102px; height: 19px; text: root.caption; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+}
+
+// One step: done, working or waiting.
+component DlgStepRow inherits Rectangle {
+    in property <string> label;
+    in property <string> meta;
+    in property <int> state: 2;     // 0 done, 1 working, 2 waiting
+    in property <length> row-h: 44px;
+    height: root.row-h;
+    Rectangle { x: 78px; y: 0px; width: root.width - 102px; height: 1px; background: Theme.line; }
+    if root.state == 0: Rectangle {
+        x: 79px;
+        y: (root.row-h - 22px) / 2;
+        width: 22px;
+        height: 22px;
+        border-radius: 11px;
+        background: Theme.ok-soft;
+        Icon { icon: Icons.check; size: 11px; tint: Theme.ok; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+    }
+    if root.state == 1: Spinner { x: 79px; y: (root.row-h - 22px) / 2; size: 22px; ink: Theme.accent; stroke: 3px; }
+    if root.state == 2: Icon { x: 82px; y: (root.row-h - 15px) / 2; icon: Icons.clock; size: 15px; tint: Theme.muted; }
+    Text { x: 78px + 36px; y: 1px; width: root.width - 102px - 36px - 96px; height: root.row-h - 1px; text: root.label; color: root.state == 2 ? Theme.muted : Theme.text; font-size: 13.5px; font-weight: root.state == 1 ? 600 : 400; vertical-alignment: center; overflow: elide; }
+    Text { x: root.width - 24px - 96px; y: 1px; width: 96px; height: root.row-h - 1px; text: root.meta; color: Theme.muted; font-size: 12.5px; horizontal-alignment: right; vertical-alignment: center; }
+}
+
+// The file that did not fit.
+component DlgErrChip inherits Rectangle {
+    in property <string> name;
+    in property <string> info;
+    height: 14px + 44px;
+    Rectangle {
+        x: 78px;
+        y: 14px;
+        width: root.width - 102px;
+        height: 44px;
+        border-radius: 10px;
+        background: Theme.chip;
+        Rectangle {
+            x: 12px;
+            y: 10px;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: Theme.danger-soft;
+            Icon { icon: Icons.file; size: 12px; tint: Theme.danger-text; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+        }
+        nm := Text { x: 46px; y: 0px; height: parent.height; text: root.name; color: Theme.text; font-size: 13px; font-weight: 600; vertical-alignment: center; }
+        Text { x: 46px + nm.preferred-width + 10px; y: 0px; width: parent.width - 60px - nm.preferred-width; height: parent.height; text: root.info; color: Theme.muted; font-size: 13px; vertical-alignment: center; overflow: elide; }
+    }
+}
+
+export enum ProgKind { copy, scan, steps, done, failed }
+
+export component ProgressDialog inherits Rectangle {
+    in property <ProgKind> kind: ProgKind.copy;
+    in property <bool> paused: false;
+    in property <bool> details: false;
+    in property <bool> live: true;
+    in-out property <bool> closed: false;
+    // 0 copy, 1 scan, 2 steps, 3 done, 4 failed, 5 asking whether to stop
+    property <int> kn: root.kind == ProgKind.copy ? 0 : root.kind == ProgKind.scan ? 1 : root.kind == ProgKind.steps ? 2 : root.kind == ProgKind.done ? 3 : 4;
+    in-out property <int> view: root.kn;
+    in-out property <bool> is-paused: root.paused;
+    in-out property <bool> det: root.details;
+    in-out property <float> pct: root.kind == ProgKind.failed ? 78 : root.kind == ProgKind.done ? 100 : 42;
+
+    property <[string]> files: ["photo-album.zip", "video-2026.mkv", "notes-backup.tar"];
+    property <[float]> gb: [1.1, 1.6, 0.5];
+    property <[float]> cum: [0, 34.4, 84.4, 100];
+    property <int> cur: root.pct < 34.4 ? 0 : root.pct < 84.4 ? 1 : 2;
+    property <float> shown: root.view == 3 ? 100 : root.view == 4 ? 78 : root.pct;
+    property <float> secs: (100 - root.shown) / 0.89;
+    property <string> time-txt: root.secs > 90 ? "About \{Math.round(root.secs / 60)} minutes left" : "About \{Math.max(5, Math.round(root.secs / 5) * 5)} seconds left";
+    property <int> speed: 86 + Math.round(Math.sin(root.pct * 97.4deg) * 6);
+
+    property <[DlgButton]> b-copy: [{ text: "Cancel", kind: BtnKind.secondary, enabled: true }, { text: root.is-paused ? "Resume" : "Pause", kind: root.is-paused ? BtnKind.primary : BtnKind.secondary, enabled: true }];
+    property <[DlgButton]> b-ask: [{ text: "Keep copying", kind: BtnKind.primary, enabled: true }, { text: "Stop copying", kind: BtnKind.danger, enabled: true }];
+    property <[DlgButton]> b-cancel: [{ text: "Cancel", kind: BtnKind.secondary, enabled: true }];
+    property <[DlgButton]> b-bg: [{ text: "Run in background", kind: BtnKind.secondary, enabled: true }];
+    property <[DlgButton]> b-done: [{ text: "Show in Files", kind: BtnKind.secondary, enabled: true }, { text: "Done", kind: BtnKind.primary, enabled: true }];
+    property <[DlgButton]> b-failed: [{ text: "Cancel", kind: BtnKind.secondary, enabled: true }, { text: "Skip file", kind: BtnKind.secondary, enabled: true }, { text: "Retry", kind: BtnKind.primary, enabled: true }];
+
+    width: 440px;
+    height: root.closed ? 132px : card.height;
+
+    Timer {
+        interval: 450ms;
+        running: root.live && root.view == 0 && !root.is-paused && !root.closed;
+        triggered => {
+            if (root.pct + 0.4 >= 100) {
+                root.pct = 100;
+                root.view = 3;
+            } else {
+                root.pct += 0.4;
+            }
+        }
+    }
+
+    if root.closed: DlgClosed {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        reopen => {
+            root.closed = false;
+            root.view = root.kn;
+            root.pct = root.kind == ProgKind.failed ? 78 : root.kind == ProgKind.done ? 100 : 42;
+            root.is-paused = root.paused;
+        }
+    }
+    card := DialogCard {
+        x: 0px;
+        y: 0px;
+        visible: !root.closed;
+        w: 440px;
+        icon: root.view == 5 ? Icons.triangle-exclamation : root.view == 1 ? Icons.microchip : root.view == 2 ? Icons.download : root.view == 3 ? Icons.circle-check : root.view == 4 ? Icons.circle-xmark : Icons.folder-open;
+        tone: root.view == 5 ? 1 : root.view == 3 ? 3 : root.view == 4 ? 2 : 0;
+        title: root.view == 5 ? "Stop copying?" : root.view == 1 ? "Looking for sensors" : root.view == 2 ? "Updating \{Brand.os} widgets" : root.view == 3 ? "Copy finished" : root.view == 4 ? "Couldn’t finish copying" : "Copying 3 files";
+        sub: root.view == 0 ? "From Downloads to Backup" : root.view == 1 ? "This takes a few seconds" : root.view == 2 ? "Do not turn off your computer" : "";
+        body: root.view == 5 ? "Files already copied stay in Backup. The file being copied now is removed, so you will need to copy it again." : root.view == 1 ? "Widgets show their values as soon as each sensor is ready." : root.view == 3 ? "3 files, 3.2 GB, copied to Backup in 2 minutes 14 seconds." : root.view == 4 ? "Backup is full. Free up space on it or choose another drive, then try again." : "";
+        buttons: root.view == 0 ? root.b-copy : root.view == 5 ? root.b-ask : root.view == 1 ? root.b-cancel : root.view == 2 ? root.b-bg : root.view == 3 ? root.b-done : root.b-failed;
+        pick(n) => {
+            if (root.view == 0) {
+                if (n == 0) {
+                    root.view = 5;
+                } else {
+                    root.is-paused = !root.is-paused;
+                }
+            } else if (root.view == 5) {
+                if (n == 0) {
+                    root.view = 0;
+                } else {
+                    root.closed = true;
+                }
+            } else if (root.view == 4) {
+                if (n == 0) {
+                    root.closed = true;
+                } else if (n == 1) {
+                    root.view = 3;
+                } else {
+                    root.pct = 78;
+                    root.is-paused = false;
+                    root.view = 0;
+                }
+            } else {
+                root.closed = true;
+            }
+        }
+        close => { root.closed = true; }
+
+        if root.view == 0 || root.view == 4: DlgBar {
+            label: root.view == 4 ? "Stopped at 78%" : root.is-paused ? "Paused" : "Copying \{root.files[root.cur]}";
+            pct-text: "\{Math.round(root.shown)}%";
+            fraction: root.shown / 100;
+            ink: root.view == 4 ? Theme.danger-line : root.is-paused ? Theme.muted : Theme.accent;
+            left-text: root.view == 4 ? "2.5 GB of 3.2 GB" : "\{Fmt.d1(root.shown / 100 * 3.2)} GB of 3.2 GB";
+            right-text: root.view == 4 ? "640 MB free" : root.is-paused ? "Resume to continue" : "\{root.speed} MB/s, \{root.time-txt}";
+        }
+        if root.view == 4: DlgErrChip { name: "video-2026.mkv"; info: "1.6 GB, needs 1.2 GB more"; }
+        if root.view == 1: DlgIndet { caption: "Checking drive temperature"; }
+        if root.view == 2: Rectangle {
+            height: 14px + 3 * 44px;
+            DlgStepRow { x: 0px; y: 14px; width: parent.width; label: "Download update"; meta: "Done, 42 MB"; state: 0; }
+            DlgStepRow { x: 0px; y: 58px; width: parent.width; label: "Install widgets"; meta: "Installing"; state: 1; }
+            DlgStepRow { x: 0px; y: 102px; width: parent.width; label: "Restart widgets"; meta: "Waiting"; state: 2; }
+        }
+        if root.view == 0: DlgDisclose { text: "Details"; open <=> root.det; }
+        if root.view == 0 && root.det: Rectangle {
+            height: 4px + 3 * 40px;
+            for i in 3: DlgStepRow {
+                x: 0px;
+                y: 4px + i * 40px;
+                width: parent.width;
+                row-h: 40px;
+                label: root.files[i];
+                state: root.shown >= root.cum[i + 1] ? 0 : i == root.cur ? 1 : 2;
+                meta: self.state == 0 ? "\{Fmt.d1(root.gb[i])} GB" : self.state == 1 ? "\{Math.round((root.shown - root.cum[i]) / (root.cum[i + 1] - root.cum[i]) * 100)}%" : "Waiting";
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Forms
+// ---------------------------------------------------------------------------
+
+export enum FormKind { rename, preset, newtask, feedback }
+
+export component FormDialog inherits Rectangle {
+    in property <FormKind> kind: FormKind.rename;
+    in property <string> seed;
+    in-out property <string> text: root.seed != "" ? root.seed : root.kind == FormKind.rename ? "Work CPU" : root.kind == FormKind.preset ? "Work layout" : root.kind == FormKind.newtask ? "\{Brand.os.to-lowercase()}-terminal" : "";
+    in-out property <bool> closed: false;
+    in-out property <bool> sent: false;
+    in-out property <int> cat: 0;
+    in-out property <int> opt: 1;
+    in-out property <bool> chk: root.kind == FormKind.feedback;
+
+    property <int> n: root.text.character-count;
+    property <string> low: root.text.to-lowercase();
+    property <string> err: root.kind == FormKind.rename
+        ? (root.text == "" ? "Name can’t be empty" : root.n > 24 ? "Use 24 characters or fewer" : (root.low == "memory" || root.low == "disk" || root.low == "network" || root.low == "gpu" || root.low == "processes") ? "Another widget already uses this name" : "")
+        : root.kind == FormKind.preset
+        ? (root.text == "" ? "Give the preset a name" : root.n > 30 ? "Use 30 characters or fewer" : (root.low == "default" || root.low == "desktop") ? "A preset with this name already exists" : "")
+        : "";
+    property <bool> can-submit: root.kind == FormKind.rename ? (root.err == "" && root.text != "CPU")
+        : root.kind == FormKind.preset ? root.err == ""
+        : root.kind == FormKind.newtask ? root.text != ""
+        : root.n >= 10;
+    property <[DlgButton]> b-form: [
+        { text: "Cancel", kind: BtnKind.secondary, enabled: true },
+        { text: root.kind == FormKind.rename ? "Rename" : root.kind == FormKind.preset ? "Save preset" : root.kind == FormKind.newtask ? "Run" : "Send", kind: BtnKind.primary, enabled: root.can-submit },
+    ];
+    property <[DlgButton]> b-thanks: [{ text: "Done", kind: BtnKind.primary, enabled: true }];
+
+    function submit() {
+        if (root.can-submit) {
+            if (root.kind == FormKind.feedback) {
+                root.sent = true;
+            } else {
+                root.closed = true;
+            }
+        }
+    }
+
+    width: 440px;
+    height: root.closed ? 132px : card.height;
+
+    if root.closed: DlgClosed {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        reopen => { root.closed = false; root.sent = false; }
+    }
+    card := DialogCard {
+        x: 0px;
+        y: 0px;
+        visible: !root.closed;
+        w: 440px;
+        icon: root.sent ? Icons.circle-check : root.kind == FormKind.rename ? Icons.pen : root.kind == FormKind.preset ? Icons.layer-group : root.kind == FormKind.newtask ? Icons.play : Icons.comment;
+        tone: root.sent ? 3 : 0;
+        title: root.sent ? "Thank you" : root.kind == FormKind.rename ? "Rename widget" : root.kind == FormKind.preset ? "Save layout preset" : root.kind == FormKind.newtask ? "Run new task" : "Send feedback";
+        sub: root.sent ? "" : root.kind == FormKind.rename ? "The name shows at the top of the widget." : root.kind == FormKind.preset ? "Come back to this arrangement any time." : root.kind == FormKind.newtask ? "Open a program, folder or document." : "Tell us what happened or what would help.";
+        body: root.sent ? "Your feedback was sent. We read every message, and we reply when we can." : "";
+        buttons: root.sent ? root.b-thanks : root.b-form;
+        pick(i) => {
+            if (root.sent) {
+                root.closed = true;
+            } else if (i == 0) {
+                root.closed = true;
+            } else {
+                root.submit();
+            }
+        }
+        close => { root.closed = true; }
+
+        if !root.sent && root.kind != FormKind.feedback: Rectangle {
+            height: 18px + ff.height;
+            ff := Field {
+                x: 24px;
+                y: 18px;
+                width: parent.width - 48px - (root.kind == FormKind.newtask ? 116px : 0px);
+                label: root.kind == FormKind.rename ? "Name" : root.kind == FormKind.preset ? "Preset name" : "Open";
+                placeholder: root.kind == FormKind.rename ? "Widget name" : root.kind == FormKind.preset ? "For example, Work layout" : "Program, folder or document";
+                text <=> root.text;
+                counter: root.kind == FormKind.rename ? "\{root.n} / 24" : root.kind == FormKind.preset ? "\{root.n} / 30" : "";
+                hint: root.kind == FormKind.rename ? "Use a short name, like “Work CPU”." : root.kind == FormKind.preset ? "6 widgets will be saved." : "For example, \{Brand.os.to-lowercase()}-terminal or ~/Documents.";
+                error: root.err;
+                accepted(t) => { root.submit(); }
+            }
+            if root.kind == FormKind.newtask: Btn {
+                x: parent.width - 24px - self.width;
+                y: 18px + 26px;
+                text: "Browse";
+                icon: Icons.folder-open;
+            }
+        }
+        if !root.sent && root.kind == FormKind.feedback: Rectangle {
+            height: 16px + 52px;
+            Segmented {
+                x: 24px;
+                y: 16px;
+                width: parent.width - 48px;
+                items: ["Problem", "Idea", "Other"];
+                seg-min: (parent.width - 48px - 16px) / 3;
+                current <=> root.cat;
+            }
+        }
+        if !root.sent && root.kind == FormKind.feedback: Rectangle {
+            height: 12px + fa.height;
+            fa := Field {
+                x: 24px;
+                y: 12px;
+                width: parent.width - 48px;
+                label: "What happened?";
+                placeholder: "Describe the problem or your idea";
+                multiline: true;
+                text <=> root.text;
+                counter: "\{root.n} / 500";
+                hint: root.n >= 10 ? "Ready to send." : "Write at least 10 characters.";
+            }
+        }
+        if !root.sent && root.kind == FormKind.preset: Rectangle {
+            height: 4px + 2 * 60px;
+            DlgOption { x: 0px; y: 4px; width: parent.width; radio: true; checked: root.opt == 0; label: "Positions and sizes"; help: "Widgets only. Each widget keeps its own settings."; toggled => { root.opt = 0; } }
+            DlgOption { x: 0px; y: 64px; width: parent.width; radio: true; checked: root.opt == 1; label: "Everything"; help: "Positions, sizes and each widget’s settings."; toggled => { root.opt = 1; } }
+        }
+        if !root.sent && root.kind != FormKind.rename: DlgOption {
+            checked: root.chk;
+            has-lead: root.kind == FormKind.newtask;
+            label: root.kind == FormKind.preset ? "Use it with the external display" : root.kind == FormKind.newtask ? "Run with administrator rights" : "Include system info";
+            help: root.kind == FormKind.preset ? "It is applied when you connect the display." : root.kind == FormKind.newtask ? "You will be asked for your password." : "CPU model, memory size and version. No files, names or passwords.";
+            toggled => { root.chk = !root.chk; }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lists
+// ---------------------------------------------------------------------------
+
+// App row with a tick box.
+component DlgAppRow inherits Rectangle {
+    in property <IconDef> icon;
+    in property <string> name;
+    in property <string> meta;
+    in property <bool> flag: false;
+    in property <bool> checked: false;
+    callback toggled();
+    height: 56px;
+    border-radius: 10px;
+    background: ta.has-hover ? Theme.hover : transparent;
+    accessible-role: AccessibleRole.checkbox;
+    accessible-checked: root.checked;
+    accessible-label: root.name;
+    Rectangle {
+        x: 12px;
+        y: 12px;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: Theme.chip;
+        Icon { icon: root.icon; size: 14px; tint: Theme.sub; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+    }
+    Text { x: 56px; y: 8px; width: root.width - 56px - 48px; height: 21px; text: root.name; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+    Text { x: 56px; y: 29px; width: root.width - 56px - 48px; height: 19px; text: root.meta; color: root.flag ? Theme.warn : Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+    DlgBox { x: root.width - 12px - 20px; y: 18px; checked: root.checked; }
+    ta := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+// App row with a button on the right.
+component DlgActRow inherits Rectangle {
+    in property <IconDef> icon;
+    in property <string> name;
+    in property <string> meta;
+    in property <string> action;
+    callback acted();
+    height: 60px;
+    Rectangle {
+        x: 0px;
+        y: 14px;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: Theme.chip;
+        Icon { icon: root.icon; size: 14px; tint: Theme.sub; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+    }
+    Text { x: 44px; y: 8px; width: root.width - 44px - 140px; height: 22px; text: root.name; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+    Text { x: 44px; y: 30px; width: root.width - 44px - 140px; height: 19px; text: root.meta; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; overflow: elide; }
+    Btn { x: root.width - self.width; y: 8px; text: root.action; clicked => { root.acted(); } }
+}
+
+// One bullet in the release notes.
+component DlgBullet inherits Rectangle {
+    in property <string> text;
+    height: t.preferred-height;
+    Text { x: 2px; y: 0px; text: "•"; color: Theme.muted; font-size: 13.5px; }
+    t := Text { x: 16px; y: 0px; width: root.width - 16px; text: root.text; wrap: TextWrap.word-wrap; color: Theme.sub; font-size: 13.5px; }
+}
+
+export enum ListKind { forcequit, eject, shutdown, update }
+
+export component ListDialog inherits Rectangle {
+    in property <ListKind> kind: ListKind.forcequit;
+    in property <bool> live: true;
+    in-out property <bool> closed: false;
+    // 0 force quit, 1 eject, 2 shutdown, 3 update, 4 drive can be removed, 5 shutting down
+    property <int> kn: root.kind == ListKind.forcequit ? 0 : root.kind == ListKind.eject ? 1 : root.kind == ListKind.shutdown ? 2 : 3;
+    in-out property <int> view: root.kn;
+    in-out property <[bool]> sel: [true, false, false];
+    in-out property <[bool]> gone: [false, false];
+    in-out property <int> left: 24;
+    in-out property <bool> restart: true;
+
+    property <int> n-sel: (root.sel[0] ? 1 : 0) + (root.sel[1] ? 1 : 0) + (root.sel[2] ? 1 : 0);
+    property <int> n-left: (root.gone[0] ? 0 : 1) + (root.gone[1] ? 0 : 1);
+    property <length> w: root.view == 3 ? 480px : 440px;
+    property <[DlgButton]> b-fq: [{ text: "Cancel", kind: BtnKind.secondary, enabled: true }, { text: root.n-sel > 0 ? "Force quit (\{root.n-sel})" : "Force quit", kind: BtnKind.danger, enabled: root.n-sel > 0 }];
+    property <[DlgButton]> b-eject: [{ text: "Cancel", kind: BtnKind.secondary, enabled: true }, { text: root.n-left > 0 ? "Close apps and eject" : "Eject", kind: BtnKind.primary, enabled: true }];
+    property <[DlgButton]> b-shut: [{ text: "Cancel", kind: BtnKind.secondary, enabled: true }, { text: "Shut down now", kind: BtnKind.danger, enabled: true }];
+    property <[DlgButton]> b-update: [{ text: "Remind me tomorrow", kind: BtnKind.secondary, enabled: true }, { text: "Update and restart", kind: BtnKind.primary, enabled: true }];
+    property <[DlgButton]> b-ok: [{ text: "Done", kind: BtnKind.primary, enabled: true }];
+    property <[DlgButton]> b-none: [];
+
+    width: root.closed ? 440px : root.w;
+    height: root.closed ? 132px : card.height;
+
+    Timer {
+        interval: 1s;
+        running: root.live && root.view == 2 && !root.closed;
+        triggered => {
+            if (root.left <= 1) {
+                root.left = 0;
+                root.view = 5;
+            } else {
+                root.left -= 1;
+            }
+        }
+    }
+
+    if root.closed: DlgClosed {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        reopen => {
+            root.closed = false;
+            root.view = root.kn;
+            root.left = 24;
+        }
+    }
+    card := DialogCard {
+        x: 0px;
+        y: 0px;
+        visible: !root.closed;
+        w: root.w;
+        icon: root.view == 0 ? Icons.circle-xmark : root.view == 1 ? Icons.hard-drive : root.view == 2 || root.view == 5 ? Icons.power-off : root.view == 3 ? Icons.download : Icons.circle-check;
+        tone: root.view == 0 ? 2 : root.view == 1 || root.view == 2 ? 1 : root.view == 4 ? 3 : 0;
+        title: root.view == 0 ? "Force quit applications" : root.view == 1 ? "Can’t eject Backup" : root.view == 2 ? "Shut down this computer?" : root.view == 3 ? "\{Brand.os} 0.9.4 is ready" : root.view == 4 ? "Backup can be removed" : "Shutting down";
+        sub: root.view == 0 ? "Choose the apps that do not respond." : root.view == 1 ? (root.n-left > 0 ? (root.n-left == 1 ? "1 app is using this drive." : "2 apps are using this drive.") : "Nothing is using it now.") : root.view == 3 ? "You have 0.9.2. Download size 186 MB." : "";
+        body: root.view == 2 ? (root.n-left > 0 ? (root.n-left == 1 ? "1 app has work that is not finished. Review it first, or shut down anyway." : "2 apps have work that is not finished. Review it first, or shut down anyway.") : "Nothing is waiting. Shutting down when the timer ends.") : root.view == 4 ? "It is safe to unplug the drive now." : root.view == 5 ? "Saving your session. See you soon." : "";
+        buttons: root.view == 0 ? root.b-fq : root.view == 1 ? root.b-eject : root.view == 2 ? root.b-shut : root.view == 3 ? root.b-update : root.view == 4 ? root.b-ok : root.b-none;
+        pick(i) => {
+            if (root.view == 0) {
+                root.closed = true;
+            } else if (root.view == 1) {
+                if (i == 0) {
+                    root.closed = true;
+                } else {
+                    root.view = 4;
+                }
+            } else if (root.view == 2) {
+                if (i == 0) {
+                    root.closed = true;
+                } else {
+                    root.view = 5;
+                }
+            } else {
+                root.closed = true;
+            }
+        }
+        close => { root.closed = true; }
+
+        if root.view == 0: Rectangle {
+            height: 12px + 3 * 56px;
+            DlgAppRow { x: 12px; y: 12px; width: parent.width - 24px; icon: Icons.globe; name: "Web Browser"; meta: "Not responding for 24 seconds"; flag: true; checked: root.sel[0]; toggled => { root.sel[0] = !root.sel[0]; } }
+            DlgAppRow { x: 12px; y: 68px; width: parent.width - 24px; icon: Icons.note-sticky; name: "Notes"; meta: "Using 6% of the processor"; checked: root.sel[1]; toggled => { root.sel[1] = !root.sel[1]; } }
+            DlgAppRow { x: 12px; y: 124px; width: parent.width - 24px; icon: Icons.terminal; name: "Terminal"; meta: "Running a command"; checked: root.sel[2]; toggled => { root.sel[2] = !root.sel[2]; } }
+        }
+        if root.view == 0: Rectangle {
+            height: 6px + 19px;
+            Text { x: 78px; y: 6px; width: parent.width - 102px; height: 19px; text: "Unsaved work in these apps will be lost."; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+        }
+        if root.view == 2: Rectangle {
+            height: 14px + 20px + 8px + 8px;
+            Text { x: 78px; y: 14px; width: parent.width - 102px; height: 20px; text: "Shutting down in \{root.left} seconds"; color: Theme.text; font-size: 13.5px; vertical-alignment: center; }
+            Rectangle {
+                x: 78px;
+                y: 42px;
+                width: parent.width - 102px;
+                height: 8px;
+                border-radius: 4px;
+                background: Theme.track;
+                clip: true;
+                accessible-role: AccessibleRole.progress-indicator;
+                accessible-label: "Time left";
+                Rectangle { x: 0px; y: 0px; width: parent.width * Math.max(0, root.left) / 30; height: parent.height; border-radius: 4px; background: Theme.warn-line; animate width { duration: 900ms; easing: linear; } }
+            }
+        }
+        if (root.view == 1 || root.view == 2) && root.n-left > 0: Rectangle {
+            height: 12px + root.n-left * 60px;
+            DlgActRow {
+                x: 24px;
+                y: 12px;
+                width: parent.width - 48px;
+                visible: !root.gone[0];
+                icon: Icons.folder;
+                name: "Files";
+                meta: root.view == 1 ? "3 open files" : "Unsaved changes in 1 note";
+                action: root.view == 1 ? "Close app" : "Review";
+                acted => { root.gone[0] = true; }
+            }
+            DlgActRow {
+                x: 24px;
+                y: root.gone[0] ? 12px : 72px;
+                width: parent.width - 48px;
+                visible: !root.gone[1];
+                icon: Icons.terminal;
+                name: "Terminal";
+                meta: root.view == 1 ? "Working in /mnt/backup" : "A command is still running";
+                action: root.view == 1 ? "Close app" : "Review";
+                acted => { root.gone[1] = true; }
+            }
+        }
+        if root.view == 3: Rectangle {
+            height: 14px + 168px;
+            Rectangle {
+                x: 24px;
+                y: 14px;
+                width: parent.width - 48px;
+                height: 168px;
+                border-radius: 10px;
+                background: Theme.chip;
+                clip: true;
+                accessible-role: AccessibleRole.text;
+                accessible-label: "Release notes";
+                Flickable {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    VerticalLayout {
+                        width: parent.width;
+                        padding: 12px;
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        spacing: 4px;
+                        alignment: start;
+                        Text { text: "New"; color: Theme.muted; font-size: 12px; font-weight: 600; }
+                        DlgBullet { text: "Widgets can be renamed and saved as layout presets."; }
+                        DlgBullet { text: "Task Manager shows disk and graphics use for each process."; }
+                        DlgBullet { text: "Dialogs follow the system dark mode."; }
+                        Rectangle { height: 6px; }
+                        Text { text: "Fixed"; color: Theme.muted; font-size: 12px; font-weight: 600; }
+                        DlgBullet { text: "The Network widget no longer wraps large speeds."; }
+                        DlgBullet { text: "The startup list keeps its order after a restart."; }
+                        DlgBullet { text: "Pausing updates now also stops the graph."; }
+                    }
+                }
+            }
+        }
+        if root.view == 3: DlgCheck { indent: 12px; text: "Restart automatically when it is done"; checked <=> root.restart; }
+    }
+    // While shutting down the icon tile shows a spinner instead of the power symbol.
+    if root.view == 5 && !root.closed: Rectangle {
+        x: 24px;
+        y: 20px;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: Theme.panel;
+        Rectangle {
+            border-radius: 12px;
+            background: Theme.fade(Theme.accent, 0.16);
+            Spinner { x: 10px; y: 10px; size: 20px; ink: Theme.accent; stroke: 3px; }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// About and crash report
+// ---------------------------------------------------------------------------
+
+// A row of the About box: small label, value, optional button on the right.
+component AboutRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <color> value-ink: Theme.text;
+    in property <int> mark: 0;      // 0 none, 1 spinner, 2 check
+    height: 53px;
+    Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: Theme.line; }
+    Text { x: 0px; y: 9px; width: parent.width; height: 18px; text: root.label; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+    if root.mark == 1: Spinner { x: 0px; y: 30px; size: 16px; ink: Theme.accent; stroke: 2.5px; }
+    if root.mark == 2: Icon { x: 0px; y: 31px; icon: Icons.circle-check; size: 14px; tint: Theme.ok; }
+    Text { x: root.mark == 0 ? 0px : 24px; y: 27px; width: parent.width - (root.mark == 0 ? 0px : 24px); height: 20px; text: root.value; color: root.value-ink; font-size: 14px; vertical-alignment: center; overflow: elide; }
+    @children
+}
+
+export component AboutDialog inherits Rectangle {
+    in-out property <bool> closed: false;
+    in-out property <int> upd: 0;       // 0 up to date, 1 checking, 2 latest version
+    in-out property <bool> copied: false;
+    width: 400px;
+    height: root.closed ? 132px : 490px;
+
+    Timer { interval: 1400ms; running: root.upd == 1; triggered => { root.upd = 2; } }
+    Timer { interval: 1600ms; running: root.copied; triggered => { root.copied = false; } }
+
+    if root.closed: DlgClosed {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        reopen => { root.closed = false; root.upd = 0; }
+    }
+    if !root.closed: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        accessible-role: AccessibleRole.groupbox;
+        accessible-label: "About \{Brand.product}";
+        Surface { x: 0px; y: 0px; width: parent.width; height: parent.height; elevation: Elevation.dialog; radius: Theme.r-dialog; }
+        Rectangle {
+            x: 348px;
+            y: 8px;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            background: cx.has-hover ? Theme.hover : transparent;
+            accessible-role: AccessibleRole.button;
+            accessible-label: "Close dialog";
+            Icon { icon: Icons.xmark; size: 14px; tint: Theme.muted; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+            cx := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+                clicked => { root.closed = true; }
+            }
+        }
+        Rectangle {
+            x: 164px;
+            y: 36px;
+            width: 72px;
+            height: 72px;
+            border-radius: 20px;
+            background: Theme.fade(Theme.accent, 0.16);
+            Icon { icon: Icons.leaf; size: 34px; tint: Theme.accent; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+        }
+        Text { x: 0px; y: 124px; width: parent.width; height: 28px; text: Brand.product; color: Theme.text; font-size: 20px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+        Text { x: 0px; y: 153px; width: parent.width; height: 20px; text: "Version 0.9.2"; color: Theme.muted; font-size: 13px; horizontal-alignment: center; vertical-alignment: center; }
+        Text { x: 40px; y: 184px; width: parent.width - 80px; height: 48px; text: "Live widgets for your desktop. They show how busy your computer is, at a glance."; wrap: TextWrap.word-wrap; color: Theme.sub; font-size: 14px; horizontal-alignment: center; }
+        AboutRow {
+            x: 24px;
+            y: 244px;
+            width: parent.width - 48px;
+            label: "Build";
+            value: "0.9.2 (4417), Qt 6.5";
+            Btn {
+                x: parent.width - self.width;
+                y: 5px;
+                text: root.copied ? "Copied" : "Copy";
+                icon: root.copied ? Icons.check : Icons.copy;
+                clicked => { root.copied = true; }
+            }
+        }
+        AboutRow {
+            x: 24px;
+            y: 297px;
+            width: parent.width - 48px;
+            label: "Updates";
+            mark: root.upd == 1 ? 1 : 2;
+            value: root.upd == 1 ? "Checking for updates" : root.upd == 2 ? "You have the latest version" : "Up to date, checked today at 09:41";
+            value-ink: root.upd == 2 ? Theme.ok : Theme.text;
+        }
+        AboutRow { x: 24px; y: 350px; width: parent.width - 48px; label: "Made with"; value: "Qt, QML and the \{Brand.os} toolkit"; }
+        HorizontalLayout {
+            x: 0px;
+            y: 422px;
+            width: parent.width;
+            height: 44px;
+            padding-right: 24px;
+            spacing: 8px;
+            alignment: end;
+            Btn { text: "Check for updates"; min-w: 88px; clicked => { root.upd = 1; } }
+            Btn { text: "Close"; kind: BtnKind.primary; min-w: 88px; clicked => { root.closed = true; } }
+        }
+    }
+}
+
+export component CrashDialog inherits Rectangle {
+    in property <bool> details: false;
+    in-out property <bool> closed: false;
+    in-out property <bool> det: root.details;
+    in-out property <bool> sent: false;
+    in-out property <bool> chk: true;
+    property <[DlgButton]> b-ask: [{ text: "Close", kind: BtnKind.secondary, enabled: true }, { text: "Send report and restart", kind: BtnKind.primary, enabled: true }];
+    property <[DlgButton]> b-done: [{ text: "Done", kind: BtnKind.primary, enabled: true }];
+    width: 480px;
+    height: root.closed ? 132px : card.height;
+
+    if root.closed: DlgClosed {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        reopen => { root.closed = false; root.sent = false; }
+    }
+    card := DialogCard {
+        x: 0px;
+        y: 0px;
+        visible: !root.closed;
+        w: 480px;
+        icon: root.sent ? Icons.circle-check : Icons.bug;
+        tone: root.sent ? 3 : 2;
+        title: root.sent ? "Report sent" : "Widgets stopped working";
+        sub: root.sent ? "Thank you for helping." : "Something went wrong and they closed.";
+        body: root.sent ? "The widgets are starting again. Your layout and settings were not changed." : "Sending a report helps us fix it. It never includes your files, names or passwords.";
+        buttons: root.sent ? root.b-done : root.b-ask;
+        pick(i) => {
+            if (root.sent) {
+                root.closed = true;
+            } else if (i == 0) {
+                root.closed = true;
+            } else {
+                root.sent = true;
+            }
+        }
+        close => { root.closed = true; }
+
+        if !root.sent: DlgDisclose { text: root.det ? "Hide details" : "Show details"; open <=> root.det; }
+        if !root.sent && root.det: DlgCode {
+            gap: 2px;
+            text: "Signal 11 (segmentation fault)\nCpuSensor::read()    cpu_sensor.cpp:142\nWidgetHost::tick()   widget_host.cpp:88\nQTimer::timeout()    qtimer.cpp:1790\nBuild 4417, Qt 6.5, up for 3 h 12 min";
+        }
+        if !root.sent: DlgCheck { indent: 12px; text: "Include system info"; checked <=> root.chk; }
+    }
+}

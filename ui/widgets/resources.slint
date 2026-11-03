@@ -1,0 +1,389 @@
+// The five resource widgets: CPU, Memory, Disk, Network, GPU.
+// Each comes in S (ring), M (number and small graph) and L (full detail), and takes
+// a status (normal, warn, crit, paused, loading, error) and a mode (normal, hover, edit).
+// Numbers and lines come from Mock; replace those bindings with your own data.
+
+import { Theme, Brand } from "../theme.slint";
+import { Icon, Icons } from "../base.slint";
+import { Mock } from "../mock.slint";
+import { WidgetFrame, WSize, WStatus, WMode, GraphBox, LegendLine, LegendDot, ProcList, ProcItem, MiniBar, StatBox, ValueRow, RingGauge, SegBar, CoreBars, Fmt, Wx } from "parts.slint";
+
+// ---------------------------------------------------------------------------
+// CPU
+// ---------------------------------------------------------------------------
+export component CpuWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.l;
+    property <int> t: Mock.tick;
+    property <float> value: Wx.hot(root.status, Mock.cpu-val[root.t], 76, 0.12, 91, 0.1);
+    property <color> tone: Wx.ink(root.status, Theme.cpu);
+    property <color> numcol: Wx.num(root.status);
+    property <string> numtxt: root.status == WStatus.loading ? "–" : Fmt.pct(root.value);
+    property <string> line: root.status == WStatus.warn ? Mock.cpu-warn[0] : root.status == WStatus.crit ? Mock.cpu-crit[0] : Mock.cpu-l[root.t];
+    property <float> endy: root.status == WStatus.warn ? Mock.cpu-warn-y[0] : root.status == WStatus.crit ? Mock.cpu-crit-y[0] : Mock.cpu-l-y[root.t];
+    property <[float]> cores: [Wx.hot(root.status, Mock.cpu-cores[root.t][0], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][1], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][2], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][3], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][4], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][5], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][6], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][7], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][8], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][9], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][10], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][11], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][12], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][13], 76, 0.12, 91, 0.1),
+        Wx.hot(root.status, Mock.cpu-cores[root.t][14], 76, 0.12, 91, 0.1), Wx.hot(root.status, Mock.cpu-cores[root.t][15], 76, 0.12, 91, 0.1)];
+    property <string> freq: "\{Fmt.d2(2.4 + root.value / 100 * 2.2)} GHz";
+    property <string> temp: "\{Math.round(38 + root.value * 0.2)} °C";
+
+    title: "CPU";
+    error-text: "CPU sensor not available";
+    icon: Icons.microchip;
+    res: Theme.cpu;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: Wx.height(root.size);
+    warn-label: "High";
+    crit-label: "Critical";
+
+    if root.size == WSize.s: RingGauge {
+        x: (root.w - 88px) / 2;
+        y: 48px + (root.h - 48px - 88px) / 2;
+        percent: root.value;
+        ink: root.tone;
+        value: root.numtxt;
+        value-color: root.numcol;
+        caption: "";
+    }
+    if root.size == WSize.m: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        Text { x: 16px; y: 62px; width: 112px; height: 38px; text: root.numtxt; color: root.numcol; font-size: 34px; font-weight: 600; vertical-alignment: center; }
+        Text { x: 16px; y: 100px; width: 112px; height: 18px; text: root.freq; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 118px; width: 112px; height: 18px; text: "16 threads"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        GraphBox { x: 144px; y: 54px; width: 176px; height: 90px; line: Mock.cpu-m[root.t]; end-y: Mock.cpu-m-y[root.t]; ink: root.tone; }
+    }
+    if root.size == WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        ValueRow { x: 16px; y: 54px; width: 304px; value: root.numtxt; ink: root.numcol; trail: "\{root.freq} · \{root.temp}"; }
+        GraphBox { x: 16px; y: 100px; width: 304px; height: 76px; line: root.line; end-y: root.endy; ink: root.tone; }
+        Text { x: 16px; y: 188px; width: 200px; height: 16px; text: "Logical processors"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 120px; y: 188px; width: 200px; height: 16px; text: "16"; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; }
+        CoreBars { x: 16px; y: 210px; width: 304px; cores: root.cores; ink: root.tone; }
+        ProcList {
+            x: 16px;
+            y: 258px;
+            width: 304px;
+            items: [
+                { icon: Icons.globe, name: "Web Browser", value: "\{Fmt.d1(Math.min(root.value * 0.8, 8.9 * root.value / 24))}%" },
+                { icon: Icons.gear, name: Brand.compositor, value: "\{Fmt.d1(Math.min(root.value * 0.8, 3.1 * root.value / 24))}%" },
+            ];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Memory
+// ---------------------------------------------------------------------------
+export component MemoryWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.l;
+    property <int> t: Mock.tick;
+    property <float> value: Wx.hot(root.status, Mock.mem-val[root.t], 77, 0.1, 91, 0.06);
+    property <float> used: root.value / 100 * 16;
+    property <float> cached: 3.1;
+    property <float> free: Math.max(0, 16 - root.used - root.cached);
+    property <float> swap: Mock.mem-swap-gb[root.t];
+    property <color> tone: Wx.ink(root.status, Theme.mem);
+    property <color> numcol: Wx.num(root.status);
+    property <string> usedtxt: "\{Fmt.d1(root.used)} GB";
+    property <string> pcttxt: root.status == WStatus.loading ? "–" : Fmt.pct(root.value);
+    property <string> line: root.status == WStatus.warn ? Mock.mem-warn[0] : root.status == WStatus.crit ? Mock.mem-crit[0] : Mock.mem-l[root.t];
+    property <float> endy: root.status == WStatus.warn ? Mock.mem-warn-y[0] : root.status == WStatus.crit ? Mock.mem-crit-y[0] : Mock.mem-l-y[root.t];
+    property <float> f: root.value / 51;
+
+    title: "Memory";
+    error-text: "Memory info not available";
+    icon: Icons.memory;
+    res: Theme.mem;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: Wx.height(root.size);
+    warn-label: "High";
+    crit-label: "Critical";
+
+    if root.size == WSize.s: RingGauge {
+        x: (root.w - 88px) / 2;
+        y: 48px + (root.h - 48px - 88px) / 2;
+        percent: root.value;
+        ink: root.tone;
+        value: root.pcttxt;
+        value-color: root.numcol;
+        caption: root.usedtxt;
+    }
+    if root.size == WSize.m: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        num := Text { x: 16px; y: 58px; height: 34px; text: root.usedtxt; color: root.numcol; font-size: 28px; font-weight: 600; vertical-alignment: center; }
+        Text { x: 16px + num.preferred-width + 8px; y: 70px; height: 18px; text: "of 16 GB"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 70px; width: 304px; height: 18px; text: root.pcttxt; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; }
+        SegBar { x: 16px; y: 102px; width: 304px; used: root.used / 16; cached: root.cached / 16; ink: root.tone; }
+        m1 := LegendDot { x: 16px; y: 124px; ink: root.tone; text: "In use \{Fmt.d1(root.used)}"; }
+        m2 := LegendDot { x: m1.x + m1.width + 14px; y: 124px; ink: Theme.fade(root.tone, 0.4); text: "Cached \{Fmt.d1(root.cached)}"; }
+        LegendDot { x: m2.x + m2.width + 14px; y: 124px; ink: Theme.track; text: "Free \{Fmt.d1(root.free)}"; }
+    }
+    if root.size == WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        ValueRow { x: 16px; y: 54px; width: 304px; value: root.usedtxt; ink: root.numcol; trail: "\{root.pcttxt} of 16 GB"; }
+        SegBar { x: 16px; y: 102px; width: 304px; used: root.used / 16; cached: root.cached / 16; ink: root.tone; }
+        l1 := LegendDot { x: 16px; y: 122px; ink: root.tone; text: "In use \{Fmt.d1(root.used)}"; }
+        l2 := LegendDot { x: l1.x + l1.width + 14px; y: 122px; ink: Theme.fade(root.tone, 0.4); text: "Cached \{Fmt.d1(root.cached)}"; }
+        LegendDot { x: l2.x + l2.width + 14px; y: 122px; ink: Theme.track; text: "Free \{Fmt.d1(root.free)}"; }
+        GraphBox { x: 16px; y: 148px; width: 304px; height: 56px; line: root.line; line2: Mock.mem-swap-l[root.t]; end-y: root.endy; ink: root.tone; }
+        MiniBar { x: 16px; y: 214px; width: 304px; label: "Swap, dashed line"; value: "\{Fmt.d1(root.swap)} GB of 8 GB"; fraction: root.swap / 8; ink: root.tone; }
+        ProcList {
+            x: 16px;
+            y: 250px;
+            width: 304px;
+            items: [
+                { icon: Icons.globe, name: "Web Browser", value: Fmt.mb(987 * root.f) },
+                { icon: Icons.gear, name: Brand.shell, value: Fmt.mb(210 * root.f) },
+            ];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Disk
+// ---------------------------------------------------------------------------
+export global DiskFmt {
+    // percent of 3.2 GB/s
+    pure public function rate(p: float) -> string {
+        p / 100 * 3200 >= 1000 ? "\{Fmt.d1(p / 100 * 3.2)} GB/s" : "\{Math.round(p / 100 * 3200)} MB/s"
+    }
+}
+
+export component DiskWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.l;
+    property <int> t: Mock.tick;
+    property <float> value: Wx.hot(root.status, Mock.disk-val[root.t], 77, 0.1, 93, 0.05);
+    property <color> tone: Wx.ink(root.status, Theme.disk);
+    property <color> numcol: Wx.num(root.status);
+    property <string> numtxt: root.status == WStatus.loading ? "–" : Fmt.pct(root.value);
+    property <string> readtxt: DiskFmt.rate(Mock.disk-read[root.t]);
+    property <string> writetxt: DiskFmt.rate(Mock.disk-write[root.t]);
+    property <string> temp: "\{Math.round(38 + root.value * 0.12)} °C";
+    property <string> line: root.status == WStatus.warn ? Mock.disk-warn[0] : root.status == WStatus.crit ? Mock.disk-crit[0] : Mock.disk-l[root.t];
+    property <float> endy: root.status == WStatus.warn ? Mock.disk-warn-y[0] : root.status == WStatus.crit ? Mock.disk-crit-y[0] : Mock.disk-l-y[root.t];
+
+    title: "Disk";
+    error-text: "Disk info not available";
+    icon: Icons.hard-drive;
+    res: Theme.disk;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: Wx.height(root.size);
+    warn-label: "Busy";
+    crit-label: "Saturated";
+
+    if root.size == WSize.s: RingGauge {
+        x: (root.w - 88px) / 2;
+        y: 48px + (root.h - 48px - 88px) / 2;
+        percent: root.value;
+        ink: root.tone;
+        value: root.numtxt;
+        value-color: root.numcol;
+        caption: "Active";
+    }
+    if root.size == WSize.m: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        Text { x: 16px; y: 51px; width: 112px; height: 38px; text: root.numtxt; color: root.numcol; font-size: 34px; font-weight: 600; vertical-alignment: center; }
+        Text { x: 16px; y: 89px; width: 112px; height: 18px; text: "Active time"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Icon { x: 16px; y: 115px; icon: Icons.arrow-down; size: 10px; tint: Theme.muted; }
+        Text { x: 32px; y: 111px; width: 96px; height: 18px; text: root.readtxt; color: Theme.text; font-size: 12px; vertical-alignment: center; }
+        Icon { x: 16px; y: 133px; icon: Icons.arrow-up; size: 10px; tint: Theme.muted; }
+        Text { x: 32px; y: 129px; width: 96px; height: 18px; text: root.writetxt; color: Theme.text; font-size: 12px; vertical-alignment: center; }
+        GraphBox { x: 144px; y: 54px; width: 176px; height: 90px; line: Mock.disk-m[root.t]; line2: Mock.disk-w-m[root.t]; end-y: Mock.disk-m-y[root.t]; ink: root.tone; }
+    }
+    if root.size == WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        ValueRow { x: 16px; y: 54px; width: 304px; value: root.numtxt; ink: root.numcol; suffix: "active"; trail: "NVMe, \{root.temp}"; }
+        l1 := LegendLine { x: 16px; y: 96px; ink: root.tone; text: "Read \{root.readtxt}"; }
+        LegendLine { x: l1.x + l1.width + 16px; y: 96px; ink: root.tone; dashed: true; text: "Write \{root.writetxt}"; }
+        GraphBox { x: 16px; y: 122px; width: 304px; height: 76px; line: root.line; line2: Mock.disk-w-l[root.t]; end-y: root.endy; ink: root.tone; }
+        MiniBar { x: 16px; y: 208px; width: 304px; label: "Storage, Home"; value: "412 GB of 512 GB"; fraction: 0.805; ink: root.tone; }
+        ProcList {
+            x: 16px;
+            y: 244px;
+            width: 304px;
+            items: [
+                { icon: Icons.rotate-right, name: "Software Updater", value: DiskFmt.rate(Mock.disk-read[root.t] * 0.55) },
+                { icon: Icons.globe, name: "Web Browser", value: DiskFmt.rate(Mock.disk-write[root.t] * 0.6) },
+            ];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Network
+// ---------------------------------------------------------------------------
+export global NetFmt {
+    // percent of 300 Mb/s
+    pure public function rate(p: float) -> string {
+        p / 100 * 300 >= 100 ? "\{Math.round(p / 100 * 300)} Mb/s"
+            : p / 100 * 300 >= 10 ? "\{Fmt.d1(p / 100 * 300)} Mb/s"
+            : p / 100 * 300 >= 1 ? "\{Fmt.d2(p / 100 * 300)} Mb/s"
+            : "\{Math.round(p / 100 * 300 * 125)} KB/s"
+    }
+}
+
+export component NetworkWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.l;
+    property <int> t: Mock.tick;
+    property <float> value: Wx.hot(root.status, Mock.net-down[root.t], 77, 0.1, 92, 0.06);
+    property <color> tone: Wx.ink(root.status, Theme.net);
+    property <color> numcol: Wx.num(root.status);
+    property <string> downtxt: root.status == WStatus.loading ? "–" : NetFmt.rate(root.value);
+    property <string> uptxt: NetFmt.rate(Mock.net-up[root.t]);
+    property <string> line: root.status == WStatus.warn ? Mock.net-warn[0] : root.status == WStatus.crit ? Mock.net-crit[0] : Mock.net-l[root.t];
+    property <float> endy: root.status == WStatus.warn ? Mock.net-warn-y[0] : root.status == WStatus.crit ? Mock.net-crit-y[0] : Mock.net-l-y[root.t];
+    property <string> signal: "\{86 + Math.round(Math.mod(root.value, 5))}%";
+    property <string> ping: "\{Math.round(14 + root.value * 0.1)} ms";
+
+    title: "Network";
+    error-text: "No network connection";
+    icon: Icons.wifi;
+    res: Theme.net;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: Wx.height(root.size);
+    warn-label: "Heavy";
+    crit-label: "Saturated";
+
+    if root.size == WSize.s: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        Icon { x: 16px; y: 56px; icon: Icons.arrow-down; size: 9px; tint: Theme.muted; }
+        Text { x: 31px; y: 54px; width: 120px; height: 14px; text: "Download"; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
+        Text { x: 16px; y: 68px; width: 128px; height: 26px; text: root.downtxt; color: root.numcol; font-size: 20px; font-weight: 600; vertical-alignment: center; }
+        Icon { x: 16px; y: 104px; icon: Icons.arrow-up; size: 9px; tint: Theme.muted; }
+        Text { x: 31px; y: 102px; width: 120px; height: 14px; text: "Upload"; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
+        Text { x: 16px; y: 116px; width: 128px; height: 26px; text: root.uptxt; color: Theme.text; font-size: 20px; font-weight: 600; vertical-alignment: center; }
+    }
+    if root.size == WSize.m: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        Icon { x: 16px; y: 59px; icon: Icons.arrow-down; size: 10px; tint: Theme.muted; }
+        Text { x: 32px; y: 55px; width: 96px; height: 16px; text: "Download"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 71px; width: 112px; height: 28px; text: root.downtxt; color: root.numcol; font-size: 20px; font-weight: 600; vertical-alignment: center; }
+        Icon { x: 16px; y: 109px; icon: Icons.arrow-up; size: 10px; tint: Theme.muted; }
+        Text { x: 32px; y: 105px; width: 96px; height: 16px; text: "Upload"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 121px; width: 112px; height: 22px; text: root.uptxt; color: Theme.text; font-size: 15px; font-weight: 600; vertical-alignment: center; }
+        GraphBox { x: 144px; y: 54px; width: 176px; height: 90px; line: Mock.net-m[root.t]; line2: Mock.net-u-m[root.t]; end-y: Mock.net-m-y[root.t]; ink: root.tone; }
+    }
+    if root.size == WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        ValueRow { x: 16px; y: 54px; width: 304px; value: root.downtxt; ink: root.numcol; trail: "Wi-Fi, Home-5G"; }
+        l1 := LegendLine { x: 16px; y: 96px; ink: root.tone; text: "Down \{root.downtxt}"; }
+        LegendLine { x: l1.x + l1.width + 16px; y: 96px; ink: root.tone; dashed: true; text: "Up \{root.uptxt}"; }
+        GraphBox { x: 16px; y: 122px; width: 304px; height: 76px; line: root.line; line2: Mock.net-u-l[root.t]; end-y: root.endy; ink: root.tone; }
+        StatBox { x: 16px; y: 208px; width: 96px; key: "Signal"; value: root.signal; }
+        StatBox { x: 120px; y: 208px; width: 96px; key: "Latency"; value: root.ping; }
+        StatBox { x: 224px; y: 208px; width: 96px; key: "IPv4"; value: "192.168.1.24"; }
+        ProcList {
+            x: 16px;
+            y: 262px;
+            width: 304px;
+            items: [
+                { icon: Icons.globe, name: "Web Browser", value: NetFmt.rate(root.value * 0.7) },
+                { icon: Icons.rotate-right, name: "Software Updater", value: NetFmt.rate(root.value * 0.2) },
+            ];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GPU
+// ---------------------------------------------------------------------------
+export component GpuWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.l;
+    property <int> t: Mock.tick;
+    property <float> value: Wx.hot(root.status, Mock.gpu-val[root.t], 77, 0.1, 92, 0.06);
+    property <float> vram: Mock.gpu-vram[root.t];
+    property <color> tone: Wx.ink(root.status, Theme.gpu);
+    property <color> numcol: Wx.num(root.status);
+    property <string> numtxt: root.status == WStatus.loading ? "–" : Fmt.pct(root.value);
+    property <string> temp: "\{Math.round(40 + root.value * 0.4)} °C";
+    property <string> clock: "\{Fmt.d1(0.6 + root.value * 0.014)} GHz";
+    property <string> vramtxt: "\{Fmt.d1(root.vram / 100 * 8)} GB";
+    property <string> line: root.status == WStatus.warn ? Mock.gpu-warn[0] : root.status == WStatus.crit ? Mock.gpu-crit[0] : Mock.gpu-l[root.t];
+    property <float> endy: root.status == WStatus.warn ? Mock.gpu-warn-y[0] : root.status == WStatus.crit ? Mock.gpu-crit-y[0] : Mock.gpu-l-y[root.t];
+
+    title: "GPU";
+    error-text: "GPU info not available";
+    icon: Icons.display;
+    res: Theme.gpu;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: Wx.height(root.size);
+    warn-label: "High";
+    crit-label: "Critical";
+
+    if root.size == WSize.s: RingGauge {
+        x: (root.w - 88px) / 2;
+        y: 48px + (root.h - 48px - 88px) / 2;
+        percent: root.value;
+        ink: root.tone;
+        value: root.numtxt;
+        value-color: root.numcol;
+        caption: root.temp;
+    }
+    if root.size == WSize.m: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        Text { x: 16px; y: 51px; width: 112px; height: 38px; text: root.numtxt; color: root.numcol; font-size: 34px; font-weight: 600; vertical-alignment: center; }
+        Text { x: 16px; y: 89px; width: 112px; height: 18px; text: "Utilization"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 111px; width: 112px; height: 18px; text: "\{root.vramtxt} VRAM"; color: Theme.text; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 129px; width: 112px; height: 18px; text: root.temp; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        GraphBox { x: 144px; y: 54px; width: 176px; height: 90px; line: Mock.gpu-m[root.t]; end-y: Mock.gpu-m-y[root.t]; ink: root.tone; }
+    }
+    if root.size == WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        ValueRow { x: 16px; y: 54px; width: 304px; value: root.numtxt; ink: root.numcol; trail: "\{root.temp}, \{root.clock}"; }
+        l1 := LegendLine { x: 16px; y: 96px; ink: root.tone; text: "Compute \{root.numtxt}"; }
+        LegendLine { x: l1.x + l1.width + 16px; y: 96px; ink: root.tone; dashed: true; text: "VRAM \{Math.round(root.vram)}%"; }
+        GraphBox { x: 16px; y: 122px; width: 304px; height: 76px; line: root.line; line2: Mock.gpu-v-l[root.t]; end-y: root.endy; ink: root.tone; }
+        MiniBar { x: 16px; y: 208px; width: 304px; label: "Video memory"; value: "\{root.vramtxt} of 8 GB"; fraction: root.vram / 100; ink: root.tone; }
+        ProcList {
+            x: 16px;
+            y: 244px;
+            width: 304px;
+            items: [
+                { icon: Icons.display, name: "Desktop shell", value: "\{Math.round(root.value * 0.4)}%" },
+                { icon: Icons.globe, name: "Web Browser", value: "\{Math.round(root.value * 0.25)}%" },
+            ];
+        }
+    }
+}

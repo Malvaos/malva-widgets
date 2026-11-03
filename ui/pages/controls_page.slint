@@ -1,0 +1,190 @@
+// Buttons, selection controls, fields, navigation, badges and progress, each in its states.
+
+import { Theme } from "../theme.slint";
+import { Icons, Icon, Txt, TextKind } from "../base.slint";
+import { Btn, BtnKind, CheckBox, RadioDot, Toggle, ToggleRow, Slide } from "../controls.slint";
+import { Field, TabBar, TabItem, Segmented, Chip, StatusBadge, BadgeKind, Count, UnreadDot, Progress, BarKind, Ring, StepDots, Skeleton } from "../fields.slint";
+import { PageHead, SectionHead, Caption, Stage } from "common.slint";
+
+component Row inherits Rectangle {
+    in property <string> label;
+    in property <length> label-w: 110px;
+    Caption { x: 0px; y: 0px; width: root.label-w; height: parent.height; text: root.label; }
+    HorizontalLayout {
+        x: root.label-w;
+        y: 0px;
+        width: parent.width - root.label-w;
+        height: parent.height;
+        spacing: 16px;
+        alignment: start;
+        @children
+    }
+}
+
+export component ControlsPage inherits Rectangle {
+    in-out property <bool> chk1: true;
+    in-out property <bool> chk2: false;
+    in-out property <bool> sw1: true;
+    in-out property <bool> sw2: false;
+    in-out property <int> radio: 1;
+    in-out property <float> vol: 0.4;
+    in-out property <int> tab: 0;
+    in-out property <int> seg: 1;
+    in-out property <bool> chip1: true;
+    in-out property <bool> chip2: false;
+    width: 1264px;
+    height: 1980px;
+    background: transparent;
+
+    PageHead { x: 28px; y: 28px; width: 1208px; title: "Controls"; note: "Every control has the same 44 px target, the same focus ring and the same hover and pressed steps."; }
+
+    // ---- buttons ------------------------------------------------------
+    SectionHead { x: 28px; y: 124px; width: 1208px; title: "Buttons"; note: "Secondary, primary, danger, text and icon-only, in every state."; }
+    Row { x: 28px; y: 196px; width: 1208px; height: 44px; label: "Secondary";
+        Btn { text: "Normal"; }
+        Btn { text: "Hover"; force-hover: true; }
+        Btn { text: "Pressed"; force-pressed: true; }
+        Btn { text: "Focus"; force-focus: true; }
+        Btn { text: "Disabled"; enabled: false; }
+        Btn { text: "Saving"; busy: true; }
+    }
+    Row { x: 28px; y: 252px; width: 1208px; height: 44px; label: "Primary";
+        Btn { text: "Normal"; kind: BtnKind.primary; }
+        Btn { text: "Hover"; kind: BtnKind.primary; force-hover: true; }
+        Btn { text: "Pressed"; kind: BtnKind.primary; force-pressed: true; }
+        Btn { text: "Focus"; kind: BtnKind.primary; force-focus: true; }
+        Btn { text: "Disabled"; kind: BtnKind.primary; enabled: false; }
+        Btn { text: "Saving"; kind: BtnKind.primary; busy: true; }
+    }
+    Row { x: 28px; y: 308px; width: 1208px; height: 44px; label: "Danger";
+        Btn { text: "Remove"; kind: BtnKind.danger; }
+        Btn { text: "Hover"; kind: BtnKind.danger; force-hover: true; }
+        Btn { text: "Pressed"; kind: BtnKind.danger; force-pressed: true; }
+        Btn { text: "Focus"; kind: BtnKind.danger; force-focus: true; }
+        Btn { text: "Disabled"; kind: BtnKind.danger; enabled: false; }
+    }
+    Row { x: 28px; y: 364px; width: 1208px; height: 44px; label: "Text";
+        Btn { text: "Don't save"; kind: BtnKind.text; }
+        Btn { text: "Hover"; kind: BtnKind.text; force-hover: true; }
+        Btn { text: "Pressed"; kind: BtnKind.text; force-pressed: true; }
+        Btn { text: "Focus"; kind: BtnKind.text; force-focus: true; }
+        Btn { text: "Disabled"; kind: BtnKind.text; enabled: false; }
+    }
+    Row { x: 28px; y: 420px; width: 1208px; height: 44px; label: "With icon";
+        Btn { text: "Open Task Manager"; icon: Icons.chart-line; kind: BtnKind.primary; }
+        Btn { text: "Copy details"; icon: Icons.copy; }
+        Btn { text: "Retry"; icon: Icons.rotate-right; }
+        Btn { icon: Icons.gear; kind: BtnKind.icon; }
+        Btn { icon: Icons.ellipsis; kind: BtnKind.icon; force-hover: true; }
+        Btn { icon: Icons.pause; kind: BtnKind.icon; toggled: true; }
+        Btn { icon: Icons.trash-can; kind: BtnKind.icon; enabled: false; }
+    }
+
+    // ---- selection ------------------------------------------------------
+    SectionHead { x: 28px; y: 492px; width: 1208px; title: "Selection"; note: "Checkboxes, radios, switches and a slider. Rows are 44 px tall so they are easy to hit."; }
+    Row { x: 28px; y: 564px; width: 1208px; height: 44px; label: "Checkbox";
+        CheckBox { text: "Off"; checked: false; }
+        CheckBox { text: "On"; checked <=> root.chk1; }
+        CheckBox { text: "Mixed"; mixed: true; checked: true; }
+        CheckBox { text: "Error"; error: true; }
+        CheckBox { text: "Focus"; checked: true; force-focus: true; }
+        CheckBox { text: "Disabled"; enabled: false; }
+    }
+    Row { x: 28px; y: 620px; width: 1208px; height: 44px; label: "Radio";
+        RadioDot { text: "Positions"; checked: root.radio == 0; picked => { root.radio = 0; } }
+        RadioDot { text: "Everything"; checked: root.radio == 1; picked => { root.radio = 1; } }
+        RadioDot { text: "Error"; error: true; }
+        RadioDot { text: "Focus"; checked: true; force-focus: true; }
+        RadioDot { text: "Disabled"; enabled: false; }
+    }
+    Row { x: 28px; y: 676px; width: 1208px; height: 44px; label: "Switch";
+        Toggle { on <=> root.sw1; }
+        Toggle { on <=> root.sw2; }
+        Toggle { on: true; force-hover: true; }
+        Toggle { on: true; force-focus: true; }
+        Toggle { on: true; enabled: false; }
+        Toggle { on: false; enabled: false; }
+    }
+    Row { x: 28px; y: 732px; width: 1208px; height: 44px; label: "Slider";
+        Slide { width: 260px; value <=> root.vol; bubble: "\{Math.round(root.vol * 100)}%"; }
+        Slide { width: 200px; value: 0.7; force-hover: true; }
+        Slide { width: 200px; value: 0.25; force-focus: true; }
+        Slide { width: 200px; value: 0.5; enabled: false; }
+    }
+
+    // ---- fields -------------------------------------------------------------
+    SectionHead { x: 28px; y: 804px; width: 1208px; title: "Fields"; note: "A label above, a hint or an error below. The error is always written out, never only a color."; }
+    Field { x: 28px; y: 876px; width: 280px; label: "Name"; placeholder: "Work CPU"; hint: "Use a short name."; }
+    Field { x: 332px; y: 876px; width: 280px; label: "Hover"; text: "Work CPU"; force-hover: true; counter: "8/24"; }
+    Field { x: 636px; y: 876px; width: 280px; label: "Focus"; text: "Work CPU"; force-focus: true; }
+    Field { x: 940px; y: 876px; width: 280px; label: "Error"; text: "Memory"; error: "Another widget already uses this name"; }
+    Field { x: 28px; y: 1010px; width: 280px; label: "Password"; text: "malva1"; password: true; trail: Icons.eye; trail-name: "Show password"; }
+    Field { x: 332px; y: 1010px; width: 280px; label: "Search"; placeholder: "Find a widget"; lead: Icons.magnifying-glass; }
+    Field { x: 636px; y: 1010px; width: 280px; label: "Size"; text: "336"; suffix: "px"; }
+    Field { x: 940px; y: 1010px; width: 280px; label: "Disabled"; text: "malva-desktop"; enabled: false; }
+
+    // ---- navigation -----------------------------------------------------------
+    SectionHead { x: 28px; y: 1144px; width: 1208px; title: "Navigation and filters"; note: "Tabs with a 3 px bar, a segmented control, and chips."; }
+    TabBar {
+        x: 28px;
+        y: 1216px;
+        width: 520px;
+        items: [{ text: "Overview", count: 0, enabled: true }, { text: "Processes", count: 12, enabled: true }, { text: "Startup", count: 3, enabled: true }, { text: "Logs", count: 0, enabled: false }];
+        current <=> root.tab;
+    }
+    Segmented { x: 600px; y: 1216px; width: 330px; items: ["Day", "Week", "Month"]; current <=> root.seg; }
+    HorizontalLayout {
+        x: 28px;
+        y: 1284px;
+        width: 800px;
+        height: 36px;
+        spacing: 8px;
+        alignment: start;
+        Chip { text: "All"; selected <=> root.chip1; }
+        Chip { text: "CPU"; selected <=> root.chip2; lead: Icons.microchip; }
+        Chip { text: "Memory"; selected: true; removable: true; }
+        Chip { text: "Disk"; enabled: false; }
+    }
+
+    // ---- badges, progress ---------------------------------------------------------
+    SectionHead { x: 28px; y: 1348px; width: 1208px; title: "Badges and progress"; note: "Status always has an icon or a word, color is only the second signal."; }
+    HorizontalLayout {
+        x: 28px;
+        y: 1420px;
+        width: 800px;
+        height: 24px;
+        spacing: 12px;
+        alignment: start;
+        StatusBadge { text: "All normal"; kind: BadgeKind.ok; }
+        StatusBadge { text: "High load"; kind: BadgeKind.warn; }
+        StatusBadge { text: "Critical"; kind: BadgeKind.err; }
+        StatusBadge { text: "Update"; kind: BadgeKind.info; }
+        StatusBadge { text: "Paused"; kind: BadgeKind.neutral; }
+        Count { text: "3"; }
+        Count { text: "12"; quiet: true; }
+        UnreadDot { }
+    }
+    Progress { x: 28px; y: 1480px; width: 360px; value: 0.46; }
+    Progress { x: 28px; y: 1500px; width: 360px; value: 0.7; kind: BarKind.warn; }
+    Progress { x: 28px; y: 1520px; width: 360px; value: 0.8; kind: BarKind.err; }
+    Progress { x: 28px; y: 1540px; width: 360px; value: 0.42; kind: BarKind.paused; }
+    Progress { x: 28px; y: 1560px; width: 360px; kind: BarKind.indeterminate; }
+    Ring { x: 460px; y: 1470px; value: 62; size: 88px; }
+    Ring { x: 570px; y: 1470px; value: 85; size: 88px; ink: Theme.warn-line; }
+    Ring { x: 680px; y: 1470px; value: 100; size: 88px; ink: Theme.ok; }
+    StepDots { x: 820px; y: 1478px; width: 360px; labels: ["Download", "Install", "Restart"]; current: 1; }
+    Skeleton { x: 820px; y: 1566px; width: 200px; height: 14px; radius: 7px; }
+    Skeleton { x: 820px; y: 1590px; width: 300px; height: 14px; radius: 7px; }
+
+    // ---- rows -----------------------------------------------------------------------
+    SectionHead { x: 28px; y: 1624px; width: 1208px; title: "Rows"; note: "A switch row has a title, one line of help and a 44 px hit area."; }
+    Stage {
+        x: 28px;
+        y: 1696px;
+        width: 520px;
+        height: 200px;
+        ToggleRow { x: 16px; y: 8px; width: 488px; title: "Show alerts"; hint: "A badge appears when a value is high."; on: true; }
+        ToggleRow { x: 16px; y: 76px; width: 488px; title: "Update every second"; hint: "Turn off to save power."; on: false; }
+        ToggleRow { x: 16px; y: 144px; width: 488px; title: "Start with the desktop"; hint: "Not available on this system."; on: true; enabled: false; divider: false; }
+    }
+}

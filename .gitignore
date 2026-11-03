@@ -1,0 +1,4 @@
+# slint-viewer wrapper written by tools/shoot.py
+ui/_shot.slint
+__pycache__/
+*.pyc

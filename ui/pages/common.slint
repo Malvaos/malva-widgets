@@ -1,0 +1,78 @@
+// Small helpers the showcase pages share.
+
+import { Theme } from "../theme.slint";
+
+// Page title with a one-line intro.
+export component PageHead inherits Rectangle {
+    in property <string> title;
+    in property <string> note;
+    height: 76px;
+    Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: 36px;
+        text: root.title;
+        color: Theme.text;
+        font-size: 28px;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 0px;
+        y: 40px;
+        width: root.width;
+        height: 22px;
+        text: root.note;
+        color: Theme.sub;
+        font-size: 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+// Section title with a rule below it.
+export component SectionHead inherits Rectangle {
+    in property <string> title;
+    in property <string> note;
+    height: 52px;
+    Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: 26px;
+        text: root.title;
+        color: Theme.text;
+        font-size: 17px;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 0px;
+        y: 26px;
+        width: root.width;
+        height: 18px;
+        text: root.note;
+        color: Theme.muted;
+        font-size: 12.5px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Rectangle { x: 0px; y: 50px; width: root.width; height: 1px; background: Theme.line; }
+}
+
+// Small label under or beside a specimen.
+export component Caption inherits Text {
+    color: Theme.muted;
+    font-size: 11.5px;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+// Soft panel that groups specimens on a page.
+export component Stage inherits Rectangle {
+    background: Theme.stage;
+    border-radius: Theme.r-dialog;
+    border-width: 1px;
+    border-color: Theme.line;
+}

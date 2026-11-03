@@ -1,0 +1,586 @@
+// Fields and navigation: text field, tabs, segmented control, chips, badges, progress.
+
+import { Theme } from "theme.slint";
+import { Icon, IconDef, Icons, FocusRing, Spinner } from "base.slint";
+
+// ---------------------------------------------------------------------------
+// Text field: label above, hint below. An error swaps the hint for an icon plus words.
+// Focus is a 2 px accent border; the blue ring is for buttons and toggles.
+// ---------------------------------------------------------------------------
+export component Field inherits Rectangle {
+    in-out property <string> text;
+    in property <string> label;
+    in property <string> placeholder;
+    in property <string> hint;
+    in property <string> error;
+    in property <string> suffix;
+    in property <string> counter;
+    in property <IconDef> lead;
+    in property <IconDef> trail;
+    in property <string> trail-name;
+    in property <bool> enabled: true;
+    in property <bool> readonly: false;
+    in property <bool> password: false;
+    in property <bool> multiline: false;
+    in property <bool> force-hover: false;
+    in property <bool> force-focus: false;
+    callback trail-clicked();
+    callback edited(string);
+    callback accepted(string);
+
+    property <bool> focused: (ti.has-focus || root.force-focus) && root.enabled;
+    property <bool> hov: (area.has-hover || root.force-hover) && root.enabled;
+    property <length> box-h: root.multiline ? 112px : 44px;
+    property <bool> has-note: root.hint != "" || root.error != "";
+
+    height: (root.label != "" ? 26px : 0px) + root.box-h + (root.has-note ? 24px : 0px);
+    min-width: 120px;
+
+    if root.label != "": Text {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 20px;
+        text: root.label;
+        color: root.enabled ? Theme.text : Theme.dis-fg;
+        font-size: 13px;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+    frame := Rectangle {
+        x: 0px;
+        y: root.label != "" ? 26px : 0px;
+        width: parent.width;
+        height: root.box-h;
+        border-radius: Theme.r-button;
+        border-width: root.error != "" || root.focused ? 2px : 1px;
+        border-color: !root.enabled ? Theme.dis-line
+            : root.readonly ? transparent
+            : root.error != "" ? Theme.danger-line
+            : root.focused ? Theme.accent
+            : root.hov ? Theme.field-h : Theme.field;
+        background: !root.enabled ? Theme.dis-bg : root.readonly ? Theme.hover : transparent;
+        animate border-color { duration: Theme.dur-instant; easing: Theme.ease-std; }
+
+        area := TouchArea {
+            mouse-cursor: MouseCursor.text;
+            clicked => { ti.focus(); }
+        }
+        if root.lead.w > 0: Icon {
+            x: 12px;
+            y: root.multiline ? 15px : (parent.height - self.height) / 2;
+            icon: root.lead;
+            size: 15px;
+            tint: Theme.muted;
+        }
+        ti := TextInput {
+            x: root.lead.w > 0 ? 36px : 12px;
+            y: root.multiline ? 10px : 0px;
+            width: parent.width - self.x - 12px - (root.trail.w > 0 ? 36px : 0px) - (root.suffix != "" ? su.preferred-width + 8px : 0px);
+            height: root.multiline ? parent.height - 20px : parent.height;
+            text <=> root.text;
+            enabled: root.enabled && !root.readonly;
+            read-only: root.readonly;
+            single-line: !root.multiline;
+            wrap: root.multiline ? TextWrap.word-wrap : TextWrap.no-wrap;
+            input-type: root.password ? InputType.password : InputType.text;
+            font-size: 14px;
+            color: root.enabled ? Theme.text : Theme.dis-fg;
+            vertical-alignment: root.multiline ? TextVerticalAlignment.top : TextVerticalAlignment.center;
+            selection-background-color: Theme.fade(Theme.focus, 0.35);
+            selection-foreground-color: Theme.text;
+            edited => { root.edited(self.text); }
+            accepted => { root.accepted(self.text); }
+        }
+        if root.text == "" && root.placeholder != "": Text {
+            x: ti.x;
+            y: root.multiline ? 10px : 0px;
+            width: ti.width;
+            height: root.multiline ? 22px : parent.height;
+            text: root.placeholder;
+            color: root.enabled ? Theme.muted : Theme.dis-fg;
+            font-size: 14px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        su := Text {
+            x: parent.width - self.width - 12px - (root.trail.w > 0 ? 36px : 0px);
+            y: 0px;
+            height: parent.height;
+            text: root.suffix;
+            color: Theme.muted;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+        if root.trail.w > 0: Rectangle {
+            x: parent.width - 44px;
+            y: 0px;
+            width: 44px;
+            height: 44px;
+            border-top-right-radius: 9px;
+            border-bottom-right-radius: 9px;
+            background: tb.has-hover ? Theme.hover : transparent;
+            Icon {
+                icon: root.trail;
+                size: 14px;
+                tint: Theme.sub;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+            }
+            tb := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+                clicked => { root.trail-clicked(); }
+            }
+        }
+    }
+    if root.error != "": Rectangle {
+        x: 0px;
+        y: parent.height - 18px;
+        width: parent.width;
+        height: 18px;
+        Icon { x: 0px; y: 2px; icon: Icons.circle-exclamation; size: 13px; tint: Theme.danger; }
+        Text {
+            x: 19px;
+            width: parent.width - 19px;
+            height: 100%;
+            text: root.error;
+            color: Theme.danger;
+            font-size: 12.5px;
+            vertical-alignment: center;
+        }
+    }
+    if root.error == "" && root.hint != "": Text {
+        x: 0px;
+        y: parent.height - 18px;
+        width: parent.width - (root.counter != "" && root.label == "" ? 70px : 0px);
+        height: 18px;
+        text: root.hint;
+        color: root.enabled ? Theme.muted : Theme.dis-fg;
+        font-size: 12.5px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    if root.counter != "": Text {
+        x: parent.width - 64px;
+        y: root.label != "" ? 0px : parent.height - 18px;
+        width: 64px;
+        height: root.label != "" ? 20px : 18px;
+        text: root.counter;
+        color: Theme.muted;
+        font-size: 12.5px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tabs: switch between views of the same thing. One row, 44 px tall.
+// ---------------------------------------------------------------------------
+export struct TabItem { text: string, count: int, enabled: bool }
+
+export component TabBar inherits Rectangle {
+    in property <[TabItem]> items;
+    in-out property <int> current: 0;
+    in property <int> force-hover: -1;
+    in property <int> force-focus: -1;
+    callback picked(int);
+    height: 45px;
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.line;
+    }
+    HorizontalLayout {
+        alignment: start;
+        spacing: 2px;
+        for item[i] in root.items: tab := Rectangle {
+            property <bool> sel: root.current == i;
+            property <bool> hov: (ta.has-hover || root.force-hover == i) && item.enabled && !self.sel;
+            height: 44px;
+            width: lbl.preferred-width + (item.count > 0 ? 28px : 0px) + 28px;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            background: self.hov ? Theme.hover : transparent;
+            animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+            lbl := Text {
+                x: 14px;
+                height: 100%;
+                text: item.text;
+                color: !item.enabled ? Theme.dis-fg : tab.sel ? Theme.accent-text : (tab.hov ? Theme.text : Theme.sub);
+                font-size: 14px;
+                font-weight: tab.sel ? 600 : 500;
+                vertical-alignment: center;
+            }
+            if item.count > 0: Rectangle {
+                x: 14px + lbl.preferred-width + 8px;
+                y: 12px;
+                width: Math.max(20px, ct.preferred-width + 12px);
+                height: 20px;
+                border-radius: 10px;
+                background: tab.sel ? Theme.primary : Theme.btn2-h;
+                ct := Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "\{item.count}";
+                    color: tab.sel ? Theme.on-primary : Theme.text;
+                    font-size: 12px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            if tab.sel: Rectangle {
+                x: 10px;
+                y: 42px;
+                width: tab.width - 20px;
+                height: 3px;
+                border-top-left-radius: 3px;
+                border-top-right-radius: 3px;
+                background: Theme.accent;
+            }
+            if root.force-focus == i: Rectangle {
+                border-radius: 10px;
+                border-width: 2px;
+                border-color: Theme.focus;
+            }
+            ta := TouchArea {
+                enabled: item.enabled;
+                mouse-cursor: MouseCursor.pointer;
+                clicked => {
+                    root.current = i;
+                    root.picked(i);
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Segmented control: two to four choices that change what you see right away.
+// ---------------------------------------------------------------------------
+export component Segmented inherits Rectangle {
+    in property <[string]> items;
+    in-out property <int> current: 0;
+    in property <int> disabled-index: -1;
+    in property <int> force-hover: -1;
+    in property <int> force-focus: -1;
+    in property <length> seg-min: 72px;
+    callback picked(int);
+    height: 52px;
+    width: lay.preferred-width + 8px;
+    border-radius: 12px;
+    background: Theme.seg-bg;
+
+    lay := HorizontalLayout {
+        x: 4px;
+        y: 4px;
+        spacing: 4px;
+        for label[i] in root.items: Rectangle {
+            property <bool> sel: root.current == i;
+            property <bool> off: root.disabled-index == i;
+            property <bool> hov: (ta.has-hover || root.force-hover == i) && !self.off && !self.sel;
+            height: 44px;
+            width: Math.max(root.seg-min, tx.preferred-width + 28px);
+            border-radius: 9px;
+            background: self.sel ? Theme.seg-on : self.hov ? Theme.hover : transparent;
+            drop-shadow-color: self.sel && !Theme.dark ? rgba(0, 0, 0, 0.12) : transparent;
+            drop-shadow-blur: 3px;
+            drop-shadow-offset-y: 1px;
+            animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+            tx := Text {
+                width: 100%;
+                height: 100%;
+                text: label;
+                color: parent.off ? Theme.dis-fg : parent.sel ? Theme.text : Theme.sub;
+                font-size: 13.5px;
+                font-weight: parent.sel ? 600 : 500;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            if root.force-focus == i: Rectangle {
+                border-radius: 9px;
+                border-width: 2px;
+                border-color: Theme.focus;
+            }
+            ta := TouchArea {
+                enabled: !parent.off;
+                mouse-cursor: MouseCursor.pointer;
+                clicked => {
+                    root.current = i;
+                    root.picked(i);
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Chip: filters and tags. 36 px to the eye, 44 px to a finger.
+// ---------------------------------------------------------------------------
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> selected: false;
+    in property <bool> enabled: true;
+    in property <bool> removable: false;
+    in property <IconDef> lead;
+    in property <bool> force-hover: false;
+    in property <bool> force-focus: false;
+    callback clicked();
+    callback removed();
+
+    property <bool> hov: (ta.has-hover || root.force-hover) && root.enabled;
+
+    height: 36px;
+    width: (root.selected ? 10px : 14px) + (root.selected || root.lead.w > 0 ? 18px : 0px) + tx.preferred-width + (root.removable ? 26px : 0px) + 14px;
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: !root.enabled ? Theme.dis-line : root.selected ? Theme.accent : root.hov ? Theme.field-h : Theme.field;
+    background: root.selected ? (root.hov ? Theme.accent-soft-h : Theme.accent-soft) : root.hov ? Theme.hover : transparent;
+    animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+
+    if root.selected: Icon {
+        x: 10px;
+        y: (parent.height - self.height) / 2;
+        icon: Icons.check;
+        size: 12px;
+        tint: Theme.accent-text;
+    }
+    if !root.selected && root.lead.w > 0: Icon {
+        x: 12px;
+        y: (parent.height - self.height) / 2;
+        icon: root.lead;
+        size: 12px;
+        tint: Theme.sub;
+    }
+    tx := Text {
+        x: (root.selected ? 10px : 14px) + (root.selected || root.lead.w > 0 ? 18px : 0px);
+        height: 100%;
+        text: root.text;
+        color: !root.enabled ? Theme.dis-fg : root.selected ? Theme.accent-text : Theme.text;
+        font-size: 13.5px;
+        font-weight: 500;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => {
+            root.selected = !root.selected;
+            root.clicked();
+        }
+    }
+    if root.removable: Rectangle {
+        x: parent.width - 28px;
+        y: 7px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: xa.has-hover ? Theme.hover2 : transparent;
+        Icon { x: 5px; y: 5px; icon: Icons.xmark; size: 10px; tint: Theme.sub; }
+        xa := TouchArea {
+            mouse-cursor: MouseCursor.pointer;
+            clicked => { root.removed(); }
+        }
+    }
+    FocusRing { active: root.force-focus && root.enabled; corner: 18px; }
+}
+
+// ---------------------------------------------------------------------------
+// Badges: small and read only. Status is an icon plus a word, so it works in grayscale.
+// ---------------------------------------------------------------------------
+export enum BadgeKind { ok, warn, err, info, neutral }
+
+export component StatusBadge inherits Rectangle {
+    in property <string> text;
+    in property <BadgeKind> kind: BadgeKind.ok;
+    height: 24px;
+    width: 8px + 12px + 6px + tx.preferred-width + 10px;
+    border-radius: 12px;
+    background: root.kind == BadgeKind.ok ? Theme.fade(Theme.ok, 0.12)
+        : root.kind == BadgeKind.warn ? Theme.fade(Theme.warn, 0.12)
+        : root.kind == BadgeKind.err ? Theme.fade(Theme.danger, 0.12)
+        : root.kind == BadgeKind.info ? Theme.accent-soft : Theme.btn2;
+    property <color> fg: root.kind == BadgeKind.ok ? Theme.ok
+        : root.kind == BadgeKind.warn ? Theme.warn
+        : root.kind == BadgeKind.err ? Theme.danger
+        : root.kind == BadgeKind.info ? Theme.accent-text : Theme.sub;
+    Icon {
+        x: 8px;
+        y: (parent.height - self.height) / 2;
+        icon: root.kind == BadgeKind.ok ? Icons.circle-check
+            : root.kind == BadgeKind.warn ? Icons.triangle-exclamation
+            : root.kind == BadgeKind.err ? Icons.circle-exclamation
+            : root.kind == BadgeKind.info ? Icons.circle-info : Icons.pause;
+        size: 12px;
+        tint: root.fg;
+    }
+    tx := Text {
+        x: 26px;
+        height: 100%;
+        text: root.text;
+        color: root.fg;
+        font-size: 12.5px;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+}
+
+// Count bubble: primary blue means something is waiting for you.
+export component Count inherits Rectangle {
+    in property <string> text;
+    in property <bool> quiet: false;
+    height: 20px;
+    width: Math.max(20px, tx.preferred-width + 12px);
+    border-radius: 10px;
+    background: root.quiet ? Theme.btn2-h : Theme.primary;
+    tx := Text {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        color: root.quiet ? Theme.text : Theme.on-primary;
+        font-size: 12px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+export component UnreadDot inherits Rectangle {
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+    background: Theme.danger-line;
+}
+
+// ---------------------------------------------------------------------------
+// Progress
+// ---------------------------------------------------------------------------
+export enum BarKind { normal, warn, err, paused, indeterminate }
+
+export component Progress inherits Rectangle {
+    in property <float> value: 0.5;
+    in property <BarKind> kind: BarKind.normal;
+    height: 6px;
+    border-radius: 3px;
+    background: Theme.track;
+    clip: true;
+    Rectangle {
+        x: root.kind == BarKind.indeterminate ? -root.width * 0.38 + mod(animation-tick() / 1500ms, 1) * root.width * 1.38 : 0px;
+        y: 0px;
+        width: root.kind == BarKind.indeterminate ? root.width * 0.38 : root.width * Math.clamp(root.value, 0, 1);
+        height: 100%;
+        border-radius: 3px;
+        background: root.kind == BarKind.warn ? Theme.warn
+            : root.kind == BarKind.err ? Theme.danger-line
+            : root.kind == BarKind.paused ? Theme.muted : Theme.ctl;
+        animate width { duration: Theme.dur-base; easing: Theme.ease-std; }
+    }
+}
+
+// Circular gauge: a track plus an arc that starts at the top and runs clockwise.
+export component Ring inherits Rectangle {
+    in property <float> value: 62;           // percent, 0..100
+    in property <length> size: 88px;
+    in property <length> thickness: 8px;
+    in property <color> ink: Theme.ctl;
+    in property <color> rail: Theme.track;
+    property <float> v: Math.clamp(root.value, 0.1, 99.9);
+    width: root.size;
+    height: root.size;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        commands: "M50 8 A42 42 0 1 1 49.99 8";
+        stroke: root.rail;
+        stroke-width: root.thickness;
+        fill: transparent;
+    }
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        commands: "M50 8 A42 42 0 \{root.v > 50 ? 1 : 0} 1 \{50 + 42 * Math.sin(root.v * 3.6deg)} \{50 - 42 * Math.cos(root.v * 3.6deg)}";
+        stroke: root.ink;
+        stroke-width: root.thickness;
+        stroke-line-cap: round;
+        fill: transparent;
+    }
+    @children
+}
+
+// Skeleton: gray placeholder while content loads. A soft highlight sweeps across.
+export component Skeleton inherits Rectangle {
+    in property <length> radius: 8px;
+    border-radius: root.radius;
+    background: Theme.chip;
+    clip: true;
+    Rectangle {
+        x: -root.width + mod(animation-tick() / 1600ms, 1) * root.width * 2;
+        y: 0px;
+        width: root.width;
+        height: 100%;
+        background: @linear-gradient(90deg, transparent 0%, Theme.fade(Theme.text, 0.05) 50%, transparent 100%);
+    }
+}
+
+// Steps of a flow (welcome wizard, install): done, current and upcoming.
+export component StepDots inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> current: 0;
+    height: 56px;
+    HorizontalLayout {
+        for name[i] in root.labels: Rectangle {
+            Rectangle {
+                x: 0px;
+                y: 13px;
+                width: parent.width / 2 - 14px;
+                height: 2px;
+                background: i <= root.current ? Theme.ctl : Theme.slider-track;
+                visible: i > 0;
+            }
+            Rectangle {
+                x: (parent.width - 28px) / 2;
+                y: 0px;
+                width: 28px;
+                height: 28px;
+                border-radius: 14px;
+                border-width: 2px;
+                border-color: i <= root.current ? Theme.ctl : Theme.field;
+                background: i < root.current ? Theme.ctl : Theme.panel;
+                if i < root.current: Icon {
+                    x: (parent.width - self.width) / 2 - 2px;
+                    y: (parent.height - self.height) / 2 - 2px;
+                    icon: Icons.check;
+                    size: 12px;
+                    tint: Theme.on-primary;
+                }
+                if i >= root.current: Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "\{i + 1}";
+                    color: i == root.current ? Theme.accent-text : Theme.sub;
+                    font-size: 12.5px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                x: 0px;
+                y: 36px;
+                width: 100%;
+                height: 18px;
+                text: name;
+                color: i == root.current ? Theme.text : Theme.muted;
+                font-size: 12.5px;
+                font-weight: i == root.current ? 600 : 400;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

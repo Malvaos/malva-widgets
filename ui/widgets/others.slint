@@ -1,0 +1,544 @@
+// Top processes, startup apps, quick actions and the XL system overview.
+
+import { Theme, Brand } from "../theme.slint";
+import { Icon, IconDef, Icons } from "../base.slint";
+import { Mock } from "../mock.slint";
+import { WidgetFrame, WSize, WStatus, WMode, GraphBox, LegendLine, StatBox, Fmt, Wx } from "parts.slint";
+
+// ---------------------------------------------------------------------------
+// Top processes
+// ---------------------------------------------------------------------------
+export struct Proc {
+    name: string,
+    icon: IconDef,
+    cpu: float,
+    mem: float,
+    disk: float,
+}
+
+export struct ProcView {
+    icon: IconDef,
+    name: string,
+    val: string,
+    pct: float,
+    level: int,        // 0 normal, 1 high, 2 critical
+}
+
+export global ProcFmt {
+    pure public function view(p: Proc, sort: int) -> ProcView {
+        return {
+            icon: p.icon,
+            name: p.name,
+            val: sort == 0 ? "\{Fmt.d1(p.cpu)}%" : sort == 1 ? Fmt.mb(p.mem) : "\{Fmt.d1(p.disk)} MB/s",
+            pct: Math.clamp((sort == 0 ? p.cpu / 100 : sort == 1 ? p.mem / 2400 : p.disk / 200) * 100, 2, 100),
+            level: sort == 0 && p.cpu >= 90 ? 2 : sort == 0 && p.cpu >= 75 ? 1 : 0,
+        };
+    }
+}
+
+component ProcCompactRow inherits Rectangle {
+    in property <ProcView> v;
+    in property <bool> bars: false;
+    in property <color> tone: Theme.procs;
+    in property <bool> paused: false;
+    height: 30px;
+    Rectangle {
+        x: 0px;
+        y: 4px;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: Theme.chip;
+        Icon {
+            icon: root.v.icon;
+            size: 12px;
+            tint: Theme.muted;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+    }
+    Text {
+        x: 30px;
+        y: 0px;
+        width: root.width - 30px - 8px - 44px - (root.bars ? 80px : 0px);
+        height: root.height;
+        text: root.v.name;
+        color: Theme.text;
+        font-size: 12.5px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    if root.bars: Rectangle {
+        x: root.width - 44px - 8px - 72px;
+        y: 12px;
+        width: 72px;
+        height: 6px;
+        border-radius: 3px;
+        background: Theme.track;
+        clip: true;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * root.v.pct / 100;
+            height: parent.height;
+            border-radius: 3px;
+            background: root.paused ? Theme.off : root.v.level == 2 ? Theme.danger-line : root.v.level == 1 ? Theme.warn-line : root.tone;
+        }
+    }
+    Text {
+        x: root.width - 44px;
+        y: 0px;
+        width: 44px;
+        height: root.height;
+        text: root.v.val;
+        color: root.v.level == 2 ? Theme.danger-text : root.v.level == 1 ? Theme.warn : Theme.text;
+        font-size: 12px;
+        font-weight: 600;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+component ProcLargeRow inherits Rectangle {
+    in property <ProcView> v;
+    in property <color> tone: Theme.procs;
+    in property <bool> paused: false;
+    height: 38px;
+    Rectangle {
+        x: 0px;
+        y: 7px;
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: Theme.chip;
+        Icon {
+            icon: root.v.icon;
+            size: 12px;
+            tint: Theme.muted;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+    }
+    Text {
+        x: 34px;
+        y: 7px;
+        width: root.width - 34px - 62px - 10px;
+        height: 16px;
+        text: root.v.name;
+        color: Theme.text;
+        font-size: 12.5px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Rectangle {
+        x: 34px;
+        y: 27px;
+        width: root.width - 34px - 62px - 10px;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.track;
+        clip: true;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * root.v.pct / 100;
+            height: parent.height;
+            border-radius: 2px;
+            background: root.paused ? Theme.off : root.v.level == 2 ? Theme.danger-line : root.v.level == 1 ? Theme.warn-line : root.tone;
+        }
+    }
+    Text {
+        x: root.width - 62px;
+        y: 0px;
+        width: 62px;
+        height: root.height;
+        text: root.v.val;
+        color: root.v.level == 2 ? Theme.danger-text : root.v.level == 1 ? Theme.warn : Theme.text;
+        font-size: 12.5px;
+        font-weight: 600;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+export component ProcessesWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.l;
+    in-out property <int> sort: 0;                    // 0 CPU, 1 Memory, 2 Disk
+    property <int> t: Mock.tick;
+    property <float> f: Mock.cpu-val[root.t] / Math.max(1, Mock.cpu-val[0]);
+    property <float> boost: root.status == WStatus.warn ? 78 : root.status == WStatus.crit ? 94 : 0;
+    property <[Proc]> list: [
+        { name: "Web Browser", icon: Icons.globe, cpu: Math.max(14 * root.f, root.boost), mem: 987 * root.f, disk: 4 * root.f },
+        { name: Brand.shell, icon: Icons.gear, cpu: 7 * root.f, mem: 210 * root.f, disk: 1 * root.f },
+        { name: "Terminal", icon: Icons.terminal, cpu: 4 * root.f, mem: 96, disk: 0.5 },
+        { name: "Files", icon: Icons.folder, cpu: 2 * root.f, mem: 144, disk: 18 * root.f },
+        { name: "Notes", icon: Icons.note-sticky, cpu: 1, mem: 82, disk: 0.2 },
+        { name: "Calculator", icon: Icons.calculator, cpu: 0.5, mem: 48, disk: 0 },
+    ];
+    // list positions, highest first, for each sort key
+    property <[int]> by-cpu: [0, 1, 2, 3, 4, 5];
+    property <[int]> by-mem: [0, 1, 3, 2, 4, 5];
+    property <[int]> by-disk: [3, 0, 1, 2, 4, 5];
+    pure function at(k: int) -> int {
+        root.sort == 0 ? root.by-cpu[k] : root.sort == 1 ? root.by-mem[k] : root.by-disk[k]
+    }
+
+    title: "Top processes";
+    icon: Icons.list-check;
+    res: Theme.procs;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: Wx.height(root.size);
+    warn-label: "High load";
+    crit-label: "Critical";
+    error-text: "Process list not available";
+
+    if root.size != WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        for k in 3: ProcCompactRow {
+            x: 16px;
+            y: 53px + k * 30px;
+            width: root.w - 32px;
+            bars: root.size == WSize.m;
+            tone: Theme.procs;
+            paused: root.status == WStatus.paused;
+            v: ProcFmt.view(root.list[root.at(k)], root.sort);
+        }
+    }
+    if root.size == WSize.l: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        // sort tabs
+        Rectangle {
+            x: 16px;
+            y: 52px;
+            width: 304px;
+            height: 44px;
+            border-radius: 10px;
+            background: Theme.chip;
+            for label[i] in ["CPU", "Memory", "Disk"]: Rectangle {
+                x: 4px + i * 100px;
+                y: 4px;
+                width: 96px;
+                height: 36px;
+                border-radius: 7px;
+                background: root.sort == i ? (Theme.dark ? #48484A : #FFFFFF) : transparent;
+                drop-shadow-color: root.sort == i ? Theme.shadow : transparent;
+                drop-shadow-blur: 3px;
+                drop-shadow-offset-y: 1px;
+                Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: label;
+                    color: root.sort == i ? Theme.text : Theme.muted;
+                    font-size: 12.5px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => { root.sort = i; }
+                }
+            }
+        }
+        for k in 5: ProcLargeRow {
+            x: 16px;
+            y: 104px + k * 38px;
+            width: 304px;
+            tone: Theme.procs;
+            paused: root.status == WStatus.paused;
+            v: ProcFmt.view(root.list[root.at(k)], root.sort);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Startup apps
+// ---------------------------------------------------------------------------
+export component StartupWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.m;
+    in-out property <[bool]> on: [true, true, false, true];
+    property <[string]> names: ["Cloud Sync", "Software Updater", "Notes", "Terminal"];
+    property <[string]> impacts: ["High", "Medium", "Low", "Low"];
+    property <int> on-count: (root.on[0] ? 1 : 0) + (root.on[1] ? 1 : 0) + (root.on[2] ? 1 : 0) + (root.on[3] ? 1 : 0);
+    property <int> high: (root.on[0] && root.impacts[0] != "Low" ? 1 : 0) + (root.on[1] && root.impacts[1] != "Low" ? 1 : 0)
+        + (root.on[2] && root.impacts[2] != "Low" ? 1 : 0) + (root.on[3] && root.impacts[3] != "Low" ? 1 : 0);
+    property <bool> hot: root.status == WStatus.warn || (root.status == WStatus.normal && root.high >= 2);
+    property <color> on-color: Theme.ctl;
+    property <color> off-color: Theme.dark ? rgba(255, 255, 255, 0.18) : rgba(50, 50, 56, 0.28);
+
+    title: "Startup apps";
+    icon: Icons.rocket;
+    res: Theme.start;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: 160px;
+    alert: root.status == WStatus.normal && root.high >= 2;
+    badge-text: root.status == WStatus.normal && root.high >= 2 ? "\{root.high} high impact" : "";
+    warn-label: "\{root.high} high impact";
+    error-text: "Startup list not available";
+
+    if root.size == WSize.s: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        Text { x: 16px; y: 61px; width: 128px; height: 38px; text: "\{root.on-count}"; color: root.hot ? Theme.warn : Theme.text; font-size: 34px; font-weight: 600; vertical-alignment: center; }
+        Text { x: 16px; y: 99px; width: 128px; height: 18px; text: "enabled of 4"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text { x: 16px; y: 117px; width: 128px; height: 18px; text: "\{root.high} high impact"; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+    }
+    if root.size == WSize.m: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.w;
+        height: root.h;
+        for k in 2: Rectangle {
+            x: 16px;
+            y: 56px + k * 44px;
+            width: 304px;
+            height: 44px;
+            Rectangle {
+                x: 0px;
+                y: 10px;
+                width: 24px;
+                height: 24px;
+                border-radius: 6px;
+                background: Theme.chip;
+                Icon {
+                    icon: k == 0 ? Icons.rotate-right : Icons.bolt;
+                    size: 12px;
+                    tint: Theme.muted;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+            Text { x: 34px; y: 6px; width: 200px; height: 17px; text: root.names[k]; color: Theme.text; font-size: 12.5px; vertical-alignment: center; overflow: elide; }
+            Text {
+                x: 34px;
+                y: 23px;
+                width: 200px;
+                height: 14px;
+                text: "\{root.impacts[k]} impact";
+                color: root.impacts[k] == "High" ? Theme.danger-text : root.impacts[k] == "Medium" ? Theme.warn : Theme.muted;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+            // switch, 40 x 22 inside a 56 x 44 hit area
+            Rectangle {
+                x: 248px;
+                y: 0px;
+                width: 56px;
+                height: 44px;
+                accessible-role: AccessibleRole.switch;
+                accessible-checked: root.on[k];
+                accessible-label: "Run \{root.names[k]} at startup";
+                Rectangle {
+                    x: 8px;
+                    y: 11px;
+                    width: 40px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: root.on[k] ? root.on-color : root.off-color;
+                    animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+                    Rectangle {
+                        x: root.on[k] ? 20px : 2px;
+                        y: 2px;
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 9px;
+                        background: #FFFFFF;
+                        drop-shadow-color: rgba(0, 0, 0, 0.3);
+                        drop-shadow-blur: 2px;
+                        drop-shadow-offset-y: 1px;
+                        animate x { duration: Theme.dur-fast; easing: Theme.ease-std; }
+                    }
+                }
+                TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => { root.on[k] = !root.on[k]; }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Quick actions
+// ---------------------------------------------------------------------------
+export component ActionsWidget inherits WidgetFrame {
+    in property <WSize> size: WSize.m;
+    in-out property <int> active: -1;                 // tile showing the check mark after a press
+    callback launched(int);                           // 0 Tasks, 1 Terminal, 2 Files, 3 Calc
+    property <[IconDef]> glyphs: [Icons.chart-line, Icons.terminal, Icons.folder, Icons.calculator];
+    property <[string]> labels: ["Tasks", "Terminal", "Files", "Calc"];
+    property <bool> small: root.size == WSize.s;
+
+    title: "Quick actions";
+    icon: Icons.bolt;
+    res: Theme.cpu;
+    pad-badge: root.size != WSize.s;
+    w: Wx.width(root.size);
+    h: 160px;
+    error-text: "Actions not available";
+
+    Timer {
+        interval: 900ms;
+        running: root.active >= 0;
+        triggered => { root.active = -1; }
+    }
+
+    for k in 4: Rectangle {
+        x: root.small ? 16px + Math.mod(k, 2) * 67px : 16px + k * 77.5px;
+        y: root.small ? 51px + Math.floor(k / 2) * 50px : 62px;
+        width: root.small ? 61px : 71.5px;
+        height: root.small ? 44px : 72px;
+        border-radius: 10px;
+        background: root.active == k ? Theme.fade(Theme.cpu, Theme.dark ? 0.28 : 0.20) : ta.has-hover ? Theme.hover : Theme.chip;
+        opacity: root.status == WStatus.paused ? 0.5 : 1;
+        accessible-role: AccessibleRole.button;
+        accessible-label: "Open \{root.labels[k]}";
+        animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        Icon {
+            icon: root.active == k ? Icons.check : root.glyphs[k];
+            size: 18px;
+            tint: root.active == k ? Theme.cpu : Theme.text;
+            x: (parent.width - self.width) / 2;
+            y: root.small ? (parent.height - self.height) / 2 : 18px;
+        }
+        if !root.small: Text {
+            x: 0px;
+            y: 40px;
+            width: parent.width;
+            height: 14px;
+            text: root.labels[k];
+            color: root.active == k ? Theme.cpu : Theme.text;
+            font-size: 11px;
+            font-weight: 500;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        ta := TouchArea {
+            mouse-cursor: MouseCursor.pointer;
+            clicked => {
+                if (root.status != WStatus.paused) {
+                    root.active = k;
+                    root.launched(k);
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// System overview (XL, 688 x 336)
+// ---------------------------------------------------------------------------
+export component SystemWidget inherits WidgetFrame {
+    property <int> t: Mock.tick;
+    property <float> cpu: Wx.hot(root.status, Mock.sys-cpu[root.t], 77, 0.1, 92, 0.06);
+    property <float> mem: Mock.sys-mem[root.t];
+    property <float> dsk: Mock.sys-disk[root.t];
+    property <float> net: Mock.sys-net[root.t];
+    property <[string]> names: ["CPU", "Memory", "Disk", "Network"];
+
+    title: "System";
+    subtitle: Brand.host;
+    icon: Icons.chart-line;
+    res: Theme.accent-text;
+    w: 688px;
+    h: 336px;
+    badge-text: root.status == WStatus.normal ? "All normal" : "";
+    badge-fill: Theme.ok-soft;
+    badge-ink: Theme.ok-text;
+    warn-label: "High load";
+    crit-label: "Critical";
+    error-text: "System info not available";
+
+    for k in 4: Rectangle {
+        property <float> v: k == 0 ? root.cpu : k == 1 ? root.mem : k == 2 ? root.dsk : root.net;
+        property <color> tone: Wx.tone(root.status, v, k == 0 ? Theme.cpu : k == 1 ? Theme.mem : k == 2 ? Theme.disk : Theme.net);
+        property <string> line: k == 0 ? Mock.sys-cpu-s[root.t] : k == 1 ? Mock.sys-mem-s[root.t] : k == 2 ? Mock.sys-disk-s[root.t] : Mock.sys-net-s[root.t];
+        x: 16px + k * 167px;
+        y: 56px;
+        width: 155px;
+        height: 96px;
+        border-radius: 10px;
+        background: Theme.chip;
+        clip: true;
+        Icon {
+            x: 10px;
+            y: 12px;
+            icon: k == 0 ? Icons.microchip : k == 1 ? Icons.memory : k == 2 ? Icons.hard-drive : Icons.wifi;
+            size: 12px;
+            tint: parent.tone;
+        }
+        Text { x: 28px; y: 10px; width: 120px; height: 16px; text: root.names[k]; color: Theme.muted; font-size: 12px; vertical-alignment: center; }
+        Text {
+            x: 10px;
+            y: 26px;
+            width: 135px;
+            height: 30px;
+            text: k == 0 ? Fmt.pct(root.cpu) : k == 1 ? "\{Fmt.d1(root.mem / 100 * 16)} GB" : k == 2 ? Fmt.pct(root.dsk) : "\{Math.round(root.net / 100 * 300)} Mb/s";
+            color: Wx.numtone(parent.v);
+            font-size: 22px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        Path {
+            x: 10px;
+            y: 58px;
+            width: 135px;
+            height: 26px;
+            viewbox-width: 135;
+            viewbox-height: 26;
+            commands: parent.line + " L135 26 L0 26 Z";
+            fill: Theme.fade(parent.tone, 0.16);
+        }
+        Path {
+            x: 10px;
+            y: 58px;
+            width: 135px;
+            height: 26px;
+            viewbox-width: 135;
+            viewbox-height: 26;
+            commands: parent.line;
+            stroke: parent.tone;
+            stroke-width: 1.75px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
+        }
+    }
+
+    // legend
+    l1 := LegendLine { x: 16px; y: 165px; swatch: 16px; ink: Theme.cpu; label: Theme.muted; text: "CPU"; }
+    l2 := LegendLine { x: l1.x + l1.width + 18px; y: 165px; swatch: 16px; ink: Theme.mem; dashed: true; label: Theme.muted; text: "Memory"; }
+    LegendLine { x: l2.x + l2.width + 18px; y: 165px; swatch: 16px; ink: Theme.net; dotted: true; label: Theme.muted; text: "Network"; }
+    Text { x: 472px; y: 164px; width: 200px; height: 20px; text: "Last 60 seconds"; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; }
+
+    GraphBox {
+        x: 16px;
+        y: 188px;
+        width: 656px;
+        height: 84px;
+        line: Mock.sys-cpu-b[root.t];
+        line2: Mock.sys-mem-b[root.t];
+        line3: Mock.sys-net-b[root.t];
+        end-y: Mock.sys-cpu-b-y[root.t];
+        ink: Theme.cpu;
+        ink2: Theme.mem;
+        ink3: Theme.net;
+        stroke2: 1.75px;
+        area-alpha: 0.14;
+    }
+
+    StatBox { x: 16px; y: 276px; width: 155px; key: "Uptime"; value: "3 d 14 h"; }
+    StatBox { x: 183px; y: 276px; width: 155px; key: "Processes"; value: "\{214 + Math.round(root.cpu / 10)}"; }
+    StatBox { x: 350px; y: 276px; width: 155px; key: "Temperature"; value: "\{Math.round(38 + root.cpu * 0.2)} °C"; }
+    StatBox { x: 517px; y: 276px; width: 155px; key: "Battery"; value: "86%, plugged in"; }
+}

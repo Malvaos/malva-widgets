@@ -1,0 +1,738 @@
+// Shared parts of every widget: the card with its header, states and edit-mode chrome,
+// plus the small pieces the widgets are built from (graph, legend, process row, mini bar).
+
+import { Theme } from "../theme.slint";
+import { Icon, IconDef, Icons, Surface, Elevation, IconTile, Pill, DashedBorder, Hairline } from "../base.slint";
+import { Mock } from "../mock.slint";
+
+export enum WSize { s, m, l, xl }
+export enum WStatus { normal, warn, crit, paused, loading, error }
+export enum WMode { normal, hover, edit }
+
+// Number formatting (Slint prints 5.0 as 5, so decimals are built by hand).
+export global Fmt {
+    pure public function d1(x: float) -> string {
+        "\{Math.floor(Math.round(x * 10) / 10)}.\{Math.mod(Math.round(x * 10), 10)}"
+    }
+    pure public function d2(x: float) -> string {
+        "\{Math.floor(Math.round(x * 100) / 100)}.\{Math.mod(Math.round(x * 100), 100) < 10 ? "0" : ""}\{Math.mod(Math.round(x * 100), 100)}"
+    }
+    pure public function pct(x: float) -> string {
+        "\{Math.round(x)}%"
+    }
+    // megabytes -> "984 MB" or "1.2 GB"
+    pure public function mb(x: float) -> string {
+        x >= 1000 ? "\{d1(x / 1024)} GB" : "\{Math.round(x)} MB"
+    }
+}
+
+// Status colors shared by all widgets: a resource color turns orange, red or gray.
+export global Wx {
+    pure public function ink(status: WStatus, base: color) -> color {
+        status == WStatus.crit ? Theme.danger-line
+            : status == WStatus.warn ? Theme.warn-line
+            : status == WStatus.paused || status == WStatus.loading || status == WStatus.error ? Theme.off
+            : base
+    }
+    pure public function num(status: WStatus) -> color {
+        status == WStatus.crit ? Theme.danger-text : status == WStatus.warn ? Theme.warn : Theme.text
+    }
+    // "Forced" demo states: warn and crit push the live value up to a fixed high band.
+    pure public function hot(status: WStatus, v: float, lw: float, kw: float, lc: float, kc: float) -> float {
+        status == WStatus.warn ? lw + v * kw : status == WStatus.crit ? lc + v * kc : v
+    }
+    // Per-value coloring used by the System widget tiles (75 = warn, 90 = critical).
+    pure public function tone(status: WStatus, v: float, base: color) -> color {
+        status == WStatus.paused ? Theme.off : v >= 90 ? Theme.danger-line : v >= 75 ? Theme.warn-line : base
+    }
+    pure public function numtone(v: float) -> color {
+        v >= 90 ? Theme.danger-text : v >= 75 ? Theme.warn : Theme.text
+    }
+    pure public function width(size: WSize) -> length {
+        size == WSize.s ? 160px : size == WSize.m ? 336px : size == WSize.l ? 336px : 688px
+    }
+    pure public function height(size: WSize) -> length {
+        size == WSize.s ? 160px : size == WSize.m ? 160px : 336px
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The card. Header: resource tile, title, status badge, and the "more" button on hover.
+// In edit mode: dashed outline, remove button, resize grip.
+// Content is placed by the widget in card coordinates (16 px margins, header is 48 px tall).
+// ---------------------------------------------------------------------------
+export component WidgetFrame inherits Rectangle {
+    in property <string> title;
+    in property <IconDef> icon;
+    in property <color> res: Theme.cpu;
+    in property <length> w: 336px;
+    in property <length> h: 336px;
+    in property <WStatus> status: WStatus.normal;
+    in property <WMode> mode: WMode.normal;
+    in property <string> warn-label: "High";
+    in property <string> crit-label: "Critical";
+    in property <string> badge-text;          // custom badge, wins over status badges
+    in property <string> error-text: "Not available";
+    in property <bool> glass: false;
+    in property <bool> pad-badge: true;       // reserve room for the "more" button
+    in property <string> subtitle;            // small muted text after the title (System)
+    in property <bool> alert: false;          // warn tint although the status is normal (automatic alerts)
+    in property <color> badge-fill: transparent;   // custom badge colors, used with badge-text
+    in property <color> badge-ink: transparent;
+    callback remove();
+    callback retry();
+    callback options();
+
+    property <bool> hov: card-ta.has-hover || root.mode == WMode.hover;
+    property <bool> edit: root.mode == WMode.edit;
+    property <color> ink: root.alert && root.status == WStatus.normal ? Theme.warn-line : Wx.ink(root.status, root.res);
+    property <string> badge: root.badge-text != "" ? root.badge-text
+        : root.status == WStatus.warn ? root.warn-label
+        : root.status == WStatus.crit ? root.crit-label
+        : root.status == WStatus.paused ? "Paused" : "";
+
+    width: root.w;
+    height: root.h;
+
+    Surface {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        glass: root.glass;
+        elevation: root.hov ? Elevation.hover : Elevation.widget;
+    }
+    card-ta := TouchArea {
+        mouse-cursor: root.edit ? MouseCursor.move : MouseCursor.default;
+    }
+    body := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        border-radius: Theme.r-card;
+        clip: true;
+
+        IconTile {
+            x: 16px;
+            y: 16px;
+            icon: root.icon;
+            tint: root.ink;
+            soft: Theme.fade(root.ink, 0.14);
+        }
+        ttl := Text {
+            x: 52px;
+            y: 16px;
+            width: Math.min(self.preferred-width, root.w - 52px - 16px - (root.pad-badge ? 26px : 0px));
+            height: 28px;
+            text: root.title;
+            color: Theme.text;
+            font-size: 13px;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.subtitle != "": Text {
+            x: 52px + ttl.width + 8px;
+            y: 16px;
+            width: 200px;
+            height: 28px;
+            text: root.subtitle;
+            color: Theme.muted;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+        if root.badge != "" && root.w >= 200px: Pill {
+            x: root.w - 16px - (root.pad-badge ? 26px : 0px) - self.width;
+            y: 19px;
+            text: root.badge;
+            fill: root.badge-fill != transparent && root.badge-text != "" ? root.badge-fill
+                : root.status == WStatus.crit ? Theme.danger-soft
+                : root.status == WStatus.warn || root.badge-text != "" ? Theme.warn-soft : Theme.chip;
+            fg: root.badge-ink != transparent && root.badge-text != "" ? root.badge-ink
+                : root.status == WStatus.crit ? Theme.danger-text
+                : root.status == WStatus.warn || root.badge-text != "" ? Theme.warn : Theme.muted;
+        }
+
+        @children
+
+        // loading: gray blocks where the content will be
+        if root.status == WStatus.loading: Rectangle {
+            x: 0px;
+            y: 48px;
+            width: 100%;
+            height: root.h - 48px;
+            background: Theme.panel;
+            Rectangle { x: 16px; y: 6px; width: (root.w - 32px) * 0.56; height: 28px; border-radius: 8px; background: Theme.chip; }
+            Rectangle { x: 16px; y: 44px; width: (root.w - 32px) * 0.36; height: 12px; border-radius: 6px; background: Theme.chip; }
+            Rectangle { x: 16px; y: 66px; width: root.w - 32px; height: root.h - 48px - 66px - 16px; border-radius: 8px; background: Theme.chip; }
+        }
+        // error: say what is wrong and offer one way out
+        if root.status == WStatus.error: Rectangle {
+            x: 0px;
+            y: 48px;
+            width: 100%;
+            height: root.h - 48px;
+            background: Theme.panel;
+            VerticalLayout {
+                alignment: center;
+                spacing: 6px;
+                padding-bottom: 12px;
+                HorizontalLayout {
+                    alignment: center;
+                    Icon { icon: Icons.triangle-exclamation; size: 18px; tint: Theme.warn; }
+                }
+                Text {
+                    text: root.error-text;
+                    color: Theme.muted;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    height: 16px;
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 44px;
+                        width: Math.max(44px, rl.preferred-width + 28px);
+                        border-radius: 8px;
+                        background: rta.has-hover ? Theme.hover : Theme.chip;
+                        rl := HorizontalLayout {
+                            alignment: center;
+                            spacing: 6px;
+                            Icon { icon: Icons.rotate-right; size: 11px; tint: Theme.text; y: (parent.height - self.height) / 2; }
+                            Text { text: "Retry"; color: Theme.text; font-size: 12px; font-weight: 500; vertical-alignment: center; }
+                        }
+                        rta := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => { root.retry(); }
+                        }
+                    }
+                }
+            }
+        }
+        // edit mode chrome
+        if root.edit: DashedBorder {
+            x: 4px;
+            y: 4px;
+            width: root.w - 8px;
+            height: root.h - 8px;
+            radius: 10px;
+            ink: Theme.focus;
+        }
+        if root.edit: Rectangle {
+            x: root.w - 50px;
+            y: 8px;
+            width: 44px;
+            height: 44px;
+            Rectangle {
+                x: 8px;
+                y: 8px;
+                width: 28px;
+                height: 28px;
+                border-radius: 14px;
+                background: Theme.danger-btn;
+                Icon {
+                    icon: Icons.xmark;
+                    size: 12px;
+                    tint: Theme.on-danger;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+            TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+                clicked => { root.remove(); }
+            }
+        }
+        if root.edit: Icon {
+            x: root.w - 28px + 3px;
+            y: root.h - 28px + 3px;
+            icon: Icons.grip-vertical;
+            size: 14px;
+            tint: Theme.muted;
+            transform-rotation: 45deg;
+        }
+        // "more" button, shown on hover or keyboard focus
+        if !root.edit: Rectangle {
+            x: root.w - 50px;
+            y: 8px;
+            width: 44px;
+            height: 44px;
+            opacity: root.hov || mta.has-hover ? 1 : 0;
+            animate opacity { duration: Theme.dur-fast; easing: Theme.ease-std; }
+            Rectangle {
+                x: 8px;
+                y: 8px;
+                width: 28px;
+                height: 28px;
+                border-radius: 8px;
+                background: mta.has-hover ? Theme.hover2 : Theme.chip;
+                Icon {
+                    icon: Icons.ellipsis;
+                    size: 14px;
+                    tint: Theme.muted;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+            mta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+                clicked => { root.options(); }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Graph: gray plate, three grid lines, filled main line, optional dashed second line, end dot.
+// Lines are SVG path strings generated for the plate's exact size (see tools/gen_mock.py).
+// ---------------------------------------------------------------------------
+export component GraphBox inherits Rectangle {
+    in property <string> line;
+    in property <string> line2;            // dashed in the data already
+    in property <string> line3;
+    in property <float> end-y: 0;
+    in property <color> ink: Theme.cpu;
+    in property <color> ink2: root.ink;
+    in property <color> ink3: root.ink;
+    in property <length> stroke: 2px;
+    in property <length> stroke2: 1.5px;
+    in property <length> stroke3: 2px;
+    in property <bool> area: true;
+    in property <bool> dot: true;
+    in property <float> area-alpha: 0.16;
+    in property <color> dot-ring: Theme.panel;
+    background: Theme.chip;
+    border-radius: 8px;
+    clip: true;
+
+    for k in 3: Rectangle {
+        x: 0px;
+        y: root.height * (k + 1) / 4;
+        width: root.width;
+        height: 1px;
+        background: Theme.grid;
+    }
+    if root.area && root.line != "": Path {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: root.line + " L\{root.width / 1px} \{root.height / 1px} L0 \{root.height / 1px} Z";
+        fill: Theme.fade(root.ink, root.area-alpha);
+    }
+    if root.line3 != "": Path {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: root.line3;
+        stroke: root.ink3;
+        stroke-width: root.stroke3;
+        stroke-line-cap: round;
+        fill: transparent;
+    }
+    if root.line2 != "": Path {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: root.line2;
+        stroke: root.ink2;
+        stroke-width: root.stroke2;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        fill: transparent;
+    }
+    if root.line != "": Path {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: root.line;
+        stroke: root.ink;
+        stroke-width: root.stroke;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        fill: transparent;
+    }
+    if root.dot && root.line != "": Rectangle {
+        x: root.width - 4.5px;
+        y: root.end-y * 1px - 4.5px;
+        width: 9px;
+        height: 9px;
+        border-radius: 4.5px;
+        background: root.dot-ring;
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: 5px;
+            height: 5px;
+            border-radius: 2.5px;
+            background: root.ink;
+        }
+    }
+}
+
+// Key to a line: a short solid or dashed stroke and a label.
+export component LegendLine inherits Rectangle {
+    in property <string> text;
+    in property <color> ink: Theme.cpu;
+    in property <bool> dashed: false;
+    in property <bool> dotted: false;
+    in property <length> swatch: 14px;
+    in property <color> label: Theme.text;
+    height: 18px;
+    width: root.swatch + 6px + tx.preferred-width;
+    if !root.dashed && !root.dotted: Rectangle {
+        x: 0px;
+        y: 8px;
+        width: root.swatch;
+        height: 2px;
+        background: root.ink;
+    }
+    if root.dashed: Rectangle { x: 0px; y: 8px; width: root.swatch * 0.36; height: 2px; background: root.ink; }
+    if root.dashed: Rectangle { x: root.swatch * 0.57; y: 8px; width: root.swatch * 0.43; height: 2px; background: root.ink; }
+    if root.dotted: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.swatch;
+        height: 18px;
+        for k in 4: Rectangle { x: k * root.swatch / 4; y: 8px; width: 2px; height: 2px; border-radius: 1px; background: root.ink; }
+    }
+    tx := Text {
+        x: root.swatch + 6px;
+        height: 100%;
+        text: root.text;
+        color: root.label;
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+}
+
+// One process: icon tile, name, value. 30 px tall.
+export component ProcRow inherits Rectangle {
+    in property <IconDef> icon;
+    in property <string> name;
+    in property <string> value;
+    in property <color> value-color: Theme.text;
+    height: 30px;
+    Rectangle {
+        x: 0px;
+        y: 4px;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: Theme.chip;
+        Icon {
+            icon: root.icon;
+            size: 12px;
+            tint: Theme.muted;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+    }
+    Text {
+        x: 32px;
+        width: root.width - 32px - 70px;
+        height: 100%;
+        text: root.name;
+        color: Theme.text;
+        font-size: 12.5px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        x: root.width - 70px;
+        width: 70px;
+        height: 100%;
+        text: root.value;
+        color: root.value-color;
+        font-size: 12px;
+        font-weight: 600;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+// Label and value over a thin bar (swap, storage, video memory).
+export component MiniBar inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <float> fraction: 0.5;
+    in property <color> ink: Theme.mem;
+    height: 26px;
+    Text {
+        x: 0px;
+        y: 0px;
+        width: parent.width * 0.5;
+        height: 15px;
+        text: root.label;
+        color: Theme.muted;
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+    Text {
+        x: parent.width * 0.5;
+        y: 0px;
+        width: parent.width * 0.5;
+        height: 15px;
+        text: root.value;
+        color: Theme.muted;
+        font-size: 12px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        x: 0px;
+        y: 20px;
+        width: 100%;
+        height: 6px;
+        border-radius: 3px;
+        background: Theme.track;
+        clip: true;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * Math.clamp(root.fraction, 0, 1);
+            height: 100%;
+            border-radius: 3px;
+            background: root.ink;
+        }
+    }
+}
+
+// Small fact box: key above, value below.
+export component StatBox inherits Rectangle {
+    in property <string> key;
+    in property <string> value;
+    height: 44px;
+    border-radius: 8px;
+    background: Theme.chip;
+    Text {
+        x: 10px;
+        y: 6px;
+        width: parent.width - 20px;
+        height: 14px;
+        text: root.key;
+        color: Theme.muted;
+        font-size: 11px;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 10px;
+        y: 20px;
+        width: parent.width - 20px;
+        height: 18px;
+        text: root.value;
+        color: Theme.text;
+        font-size: 12.5px;
+        font-weight: 600;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+// Big number used by every widget.
+export component BigNumber inherits Text {
+    in property <length> px: 32px;
+    in property <color> ink: Theme.text;
+    color: root.ink;
+    font-size: root.px;
+    font-weight: 600;
+    vertical-alignment: center;
+}
+
+// Ring gauge with centered value, used by the small widgets.
+export component RingGauge inherits Rectangle {
+    in property <float> percent: 31;
+    in property <color> ink: Theme.cpu;
+    in property <string> value;
+    in property <string> caption;
+    in property <color> value-color: Theme.text;
+    width: 88px;
+    height: 88px;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        commands: "M50 8 A42 42 0 1 1 49.99 8";
+        stroke: Theme.track;
+        stroke-width: 7.92px;
+        fill: transparent;
+    }
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        commands: "M50 8 A42 42 0 \{Math.clamp(root.percent, 0.1, 99.9) > 50 ? 1 : 0} 1 \{50 + 42 * Math.sin(Math.clamp(root.percent, 0.1, 99.9) * 3.6deg)} \{50 - 42 * Math.cos(Math.clamp(root.percent, 0.1, 99.9) * 3.6deg)}";
+        stroke: root.ink;
+        stroke-width: 7.92px;
+        stroke-line-cap: round;
+        fill: transparent;
+    }
+    Text {
+        x: 0px;
+        y: 18px;
+        width: 100%;
+        height: 26px;
+        text: root.value;
+        color: root.value-color;
+        font-size: 22px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 0px;
+        y: 44px;
+        width: 100%;
+        height: 14px;
+        text: root.caption;
+        color: Theme.muted;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// More building blocks shared by the resource widgets
+// ---------------------------------------------------------------------------
+
+// Big number on the left, optional small text right after it, optional text at the far right.
+export component ValueRow inherits Rectangle {
+    in property <string> value;
+    in property <string> suffix;
+    in property <string> trail;
+    in property <color> ink: Theme.text;
+    in property <length> px: 32px;
+    height: 40px;
+    num := Text {
+        x: 0px;
+        y: 0px;
+        height: 40px;
+        text: root.value;
+        color: root.ink;
+        font-size: root.px;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+    if root.suffix != "": Text {
+        x: num.preferred-width + 8px;
+        y: 16px;
+        height: 16px;
+        text: root.suffix;
+        color: Theme.muted;
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 0px;
+        y: 16px;
+        width: root.width;
+        height: 16px;
+        text: root.trail;
+        color: Theme.muted;
+        font-size: 12px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+// Round color dot and a label (memory legend).
+export component LegendDot inherits Rectangle {
+    in property <string> text;
+    in property <color> ink: Theme.cpu;
+    height: 16px;
+    width: 14px + tx.preferred-width;
+    Rectangle { x: 0px; y: 4px; width: 8px; height: 8px; border-radius: 4px; background: root.ink; }
+    tx := Text {
+        x: 14px;
+        height: 100%;
+        text: root.text;
+        color: Theme.muted;
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+}
+
+// Two-part bar: in use (solid) and cached (faded) on a track.
+export component SegBar inherits Rectangle {
+    in property <float> used: 0.5;
+    in property <float> cached: 0.2;
+    in property <color> ink: Theme.mem;
+    height: 12px;
+    border-radius: 6px;
+    background: Theme.track;
+    clip: true;
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width * Math.clamp(root.used, 0, 1);
+        height: parent.height;
+        background: root.ink;
+    }
+    Rectangle {
+        x: parent.width * Math.clamp(root.used, 0, 1);
+        y: 0px;
+        width: parent.width * Math.clamp(root.cached, 0, 1 - Math.clamp(root.used, 0, 1));
+        height: parent.height;
+        background: Theme.fade(root.ink, 0.4);
+    }
+}
+
+export struct ProcItem {
+    icon: IconDef,
+    name: string,
+    value: string,
+}
+
+// Rule on top, then one row per process.
+export component ProcList inherits Rectangle {
+    in property <[ProcItem]> items;
+    height: 1px + root.items.length * 30px;
+    Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: Theme.line; }
+    for it[i] in root.items: ProcRow {
+        x: 0px;
+        y: 1px + i * 30px;
+        width: root.width;
+        icon: it.icon;
+        name: it.name;
+        value: it.value;
+    }
+}
+
+// The 16 per-core bars of the CPU widget.
+export component CoreBars inherits Rectangle {
+    in property <[float]> cores;
+    in property <color> ink: Theme.cpu;
+    height: 36px;
+    for c[i] in root.cores: Rectangle {
+        x: i * (root.width + 4px) / 16;
+        y: 0px;
+        width: (root.width - 15 * 4px) / 16;
+        height: parent.height;
+        border-radius: 4px;
+        background: Theme.track;
+        clip: true;
+        Rectangle {
+            x: 0px;
+            y: parent.height - self.height;
+            width: parent.width;
+            height: parent.height * Math.clamp(Math.max(4, c), 4, 100) / 100;
+            border-radius: 3px;
+            background: root.ink;
+        }
+    }
+}

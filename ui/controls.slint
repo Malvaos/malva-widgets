@@ -1,0 +1,529 @@
+// Actions and selection: buttons, checkbox, radio, switch, slider.
+// Every control is 44 px tall (or has a 44 px hit area), reaches 3:1 against its panel, and
+// draws a 2 px ring with a 2 px gap on keyboard focus only.
+//
+// `force-hover`, `force-pressed` and `force-focus` exist so a state can be drawn without a pointer
+// (the spec sheets and screenshots use them). Real apps leave them false.
+
+import { Theme } from "theme.slint";
+import { Icon, IconDef, Icons, FocusRing, Spinner } from "base.slint";
+
+// ---------------------------------------------------------------------------
+// Button: primary, secondary, danger, text and icon-only.
+// ---------------------------------------------------------------------------
+export enum BtnKind { secondary, primary, danger, text, icon, ghost }
+
+export component Btn inherits Rectangle {
+    in property <string> text;
+    in property <IconDef> icon;
+    in property <BtnKind> kind: BtnKind.secondary;
+    in property <bool> enabled: true;
+    in property <bool> busy: false;
+    in property <bool> toggled: false;
+    in property <bool> force-hover: false;
+    in property <bool> force-pressed: false;
+    in property <bool> force-focus: false;
+    in property <length> pad: 18px;
+    in property <length> min-w: root.kind == BtnKind.icon ? 44px : root.kind == BtnKind.text ? 64px : 88px;
+    in property <length> glyph: 15px;
+    callback clicked();
+
+    property <bool> hov: (ta.has-hover || root.force-hover) && root.enabled;
+    property <bool> down: (ta.pressed || root.force-pressed) && root.enabled;
+    property <bool> solid: root.kind == BtnKind.primary || root.kind == BtnKind.danger;
+    property <bool> on: root.toggled && root.kind != BtnKind.icon && !root.solid;
+    property <bool> icon-on: root.toggled && root.kind == BtnKind.icon;
+
+    height: 44px;
+    width: Math.max(root.min-w, lay.preferred-width + 2 * root.pad);
+    border-radius: root.kind == BtnKind.icon ? 12px : Theme.r-button;
+    transform-scale: root.down ? 0.98 : 1;
+    background: !root.enabled ? (root.kind == BtnKind.text || root.kind == BtnKind.icon || root.kind == BtnKind.ghost ? transparent : Theme.dis-bg)
+        : root.kind == BtnKind.primary ? (root.down ? Theme.primary-p : root.hov ? Theme.primary-h : Theme.primary)
+        : root.kind == BtnKind.danger ? (root.down ? Theme.danger-btn-p : root.hov ? Theme.danger-btn-h : Theme.danger-btn)
+        : root.kind == BtnKind.text ? (root.down ? Theme.accent-soft-h : root.hov ? Theme.accent-soft : transparent)
+        : root.kind == BtnKind.icon ? (root.icon-on ? (root.hov ? Theme.accent-soft-h : Theme.accent-soft) : root.down ? Theme.hover2 : root.hov ? Theme.hover : transparent)
+        : root.kind == BtnKind.ghost ? (root.down ? Theme.hover2 : root.hov ? Theme.hover : transparent)
+        : root.on ? (root.hov ? Theme.accent-soft-h : Theme.accent-soft)
+        : root.down ? Theme.btn2-p : root.hov ? Theme.btn2-h : Theme.btn2;
+    animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+    animate transform-scale { duration: Theme.dur-instant; easing: Theme.ease-std; }
+
+    property <color> fg: !root.enabled ? Theme.dis-fg
+        : root.solid ? (root.kind == BtnKind.danger ? Theme.on-danger : Theme.on-primary)
+        : root.kind == BtnKind.text ? (root.hov ? Theme.accent-text : Theme.accent)
+        : root.kind == BtnKind.icon ? (root.icon-on ? Theme.accent : Theme.sub)
+        : root.on ? Theme.accent-text
+        : Theme.text;
+
+    lay := HorizontalLayout {
+        x: root.pad;
+        width: parent.width - 2 * root.pad;
+        alignment: center;
+        spacing: 8px;
+        if root.busy: Spinner {
+            size: 16px;
+            ink: root.fg;
+            y: (parent.height - self.height) / 2;
+        }
+        if !root.busy && root.icon.w > 0: Icon {
+            icon: root.icon;
+            size: root.glyph;
+            tint: root.fg;
+            y: (parent.height - self.height) / 2;
+        }
+        if root.text != "": Text {
+            text: root.text;
+            color: root.fg;
+            font-size: 14px;
+            font-weight: root.solid || root.kind == BtnKind.text || root.on ? 600 : 500;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled && !root.busy;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    FocusRing { active: (fs.has-focus || root.force-focus) && root.enabled; corner: root.border-radius; }
+}
+
+// ---------------------------------------------------------------------------
+// Checkbox: 20 px box, 6 px corners, 44 px hit area. Also does the mixed state.
+// ---------------------------------------------------------------------------
+export component CheckBox inherits Rectangle {
+    in-out property <bool> checked: false;
+    in property <bool> mixed: false;
+    in property <bool> error: false;
+    in property <bool> enabled: true;
+    in property <string> text;
+    in property <string> hint;
+    in property <bool> force-hover: false;
+    in property <bool> force-pressed: false;
+    in property <bool> force-focus: false;
+    callback toggled(bool);
+
+    property <bool> hov: (ta.has-hover || root.force-hover) && root.enabled;
+    property <bool> down: (ta.pressed || root.force-pressed) && root.enabled;
+    property <bool> filled: root.checked || root.mixed;
+
+    height: root.hint == "" ? 44px : 52px;
+    width: root.text == "" ? 44px : 20px + 12px + Math.max(t1.preferred-width, t2.preferred-width) + 8px;
+
+    // halo
+    Rectangle {
+        x: (root.text == "" ? (44px - 36px) / 2 : -8px);
+        y: (parent.height - 36px) / 2 - (root.hint == "" ? 0px : 0px);
+        width: 36px;
+        height: 36px;
+        border-radius: 18px;
+        background: root.down ? Theme.hover2 : root.hov ? Theme.hover : transparent;
+        animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+    }
+    box := Rectangle {
+        x: root.text == "" ? 12px : 0px;
+        y: (parent.height - 20px) / 2;
+        width: 20px;
+        height: 20px;
+        border-radius: Theme.r-check;
+        border-width: 2px;
+        opacity: root.enabled ? 1 : 0.45;
+        border-color: root.filled ? (root.error ? Theme.danger-line : root.hov ? Theme.ctl-h : Theme.ctl)
+            : root.error ? Theme.danger-line : root.hov ? Theme.field-h : Theme.field;
+        background: root.filled ? (root.error ? Theme.danger-btn : root.hov ? Theme.ctl-h : Theme.ctl) : transparent;
+        animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        animate border-color { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        Path {
+            width: 100%;
+            height: 100%;
+            viewbox-width: 16;
+            viewbox-height: 16;
+            commands: root.mixed ? "M4 8 L12 8" : "M3.6 8.4 L6.7 11.4 L12.6 4.8";
+            stroke: Theme.on-primary;
+            stroke-width: 2px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
+            opacity: root.filled ? 1 : 0;
+            animate opacity { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        }
+        FocusRing { active: (fs.has-focus || root.force-focus) && root.enabled; corner: Theme.r-check; }
+    }
+    t1 := Text {
+        x: 32px;
+        y: root.hint == "" ? 0px : 4px;
+        height: root.hint == "" ? 44px : 20px;
+        text: root.text;
+        color: root.enabled ? Theme.text : Theme.dis-fg;
+        font-size: 14px;
+        vertical-alignment: center;
+    }
+    t2 := Text {
+        x: 32px;
+        y: 24px;
+        height: 18px;
+        text: root.hint;
+        color: root.enabled ? Theme.muted : Theme.dis-fg;
+        font-size: 12.5px;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => {
+            root.checked = root.mixed ? true : !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " ") {
+                root.checked = root.mixed ? true : !root.checked;
+                root.toggled(root.checked);
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Radio button: pick exactly one.
+// ---------------------------------------------------------------------------
+export component RadioDot inherits Rectangle {
+    in property <bool> checked: false;
+    in property <bool> error: false;
+    in property <bool> enabled: true;
+    in property <string> text;
+    in property <string> hint;
+    in property <bool> force-hover: false;
+    in property <bool> force-pressed: false;
+    in property <bool> force-focus: false;
+    callback picked();
+
+    property <bool> hov: (ta.has-hover || root.force-hover) && root.enabled;
+    property <bool> down: (ta.pressed || root.force-pressed) && root.enabled;
+
+    height: root.hint == "" ? 44px : 52px;
+    width: root.text == "" ? 44px : 20px + 12px + Math.max(t1.preferred-width, t2.preferred-width) + 8px;
+
+    Rectangle {
+        x: (root.text == "" ? (44px - 36px) / 2 : -8px);
+        y: (parent.height - 36px) / 2;
+        width: 36px;
+        height: 36px;
+        border-radius: 18px;
+        background: root.down ? Theme.hover2 : root.hov ? Theme.hover : transparent;
+        animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+    }
+    Rectangle {
+        x: root.text == "" ? 12px : 0px;
+        y: (parent.height - 20px) / 2;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        border-width: 2px;
+        opacity: root.enabled ? 1 : 0.45;
+        border-color: root.error ? Theme.danger-line
+            : root.checked ? (root.hov ? Theme.ctl-h : Theme.ctl)
+            : root.hov ? Theme.field-h : Theme.field;
+        animate border-color { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        Rectangle {
+            x: (parent.width - self.width) / 2 - 2px;
+            y: (parent.height - self.height) / 2 - 2px;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background: root.error ? Theme.danger-line : root.hov ? Theme.ctl-h : Theme.ctl;
+            transform-scale: root.checked ? 1 : 0;
+            animate transform-scale { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        }
+        FocusRing { active: (fs.has-focus || root.force-focus) && root.enabled; corner: 10px; }
+    }
+    t1 := Text {
+        x: 32px;
+        y: root.hint == "" ? 0px : 4px;
+        height: root.hint == "" ? 44px : 20px;
+        text: root.text;
+        color: root.enabled ? Theme.text : Theme.dis-fg;
+        font-size: 14px;
+        vertical-alignment: center;
+    }
+    t2 := Text {
+        x: 32px;
+        y: 24px;
+        height: 18px;
+        text: root.hint;
+        color: root.enabled ? Theme.muted : Theme.dis-fg;
+        font-size: 12.5px;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.picked(); }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " ") {
+                root.picked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Switch: for settings that apply right away. 44 x 26 track, thumb grows when pressed.
+// ---------------------------------------------------------------------------
+export component Toggle inherits Rectangle {
+    in-out property <bool> on: false;
+    in property <bool> enabled: true;
+    in property <bool> force-hover: false;
+    in property <bool> force-pressed: false;
+    in property <bool> force-focus: false;
+    callback toggled(bool);
+
+    property <bool> hov: (ta.has-hover || root.force-hover) && root.enabled;
+    property <bool> down: (ta.pressed || root.force-pressed) && root.enabled;
+
+    width: 44px;
+    height: 44px;
+    opacity: root.enabled ? 1 : 0.45;
+
+    track := Rectangle {
+        y: 9px;
+        width: 44px;
+        height: 26px;
+        border-radius: 13px;
+        border-width: 2px;
+        border-color: root.on ? (root.hov ? Theme.ctl-h : Theme.ctl) : root.hov ? Theme.field-h : Theme.field;
+        background: root.on ? (root.hov ? Theme.ctl-h : Theme.ctl) : transparent;
+        animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        animate border-color { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        thumb := Rectangle {
+            property <length> d: root.on ? (root.down ? 22px : 18px) : (root.down ? 20px : 14px);
+            x: root.on ? 40px - 2px - self.d - 2px : 4px - 2px;
+            y: (parent.height - self.height) / 2 - 2px;
+            width: self.d;
+            height: self.d;
+            border-radius: self.d / 2;
+            background: root.on ? Theme.on-primary : root.hov ? Theme.field-h : Theme.field;
+            animate x { duration: Theme.dur-fast; easing: Theme.ease-std; }
+            animate width { duration: Theme.dur-fast; easing: Theme.ease-std; }
+            animate height { duration: Theme.dur-fast; easing: Theme.ease-std; }
+            animate background { duration: Theme.dur-fast; easing: Theme.ease-std; }
+        }
+    }
+    FocusRing {
+        x: 0px;
+        y: 9px;
+        width: 44px;
+        height: 26px;
+        active: (fs.has-focus || root.force-focus) && root.enabled;
+        corner: 13px;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => {
+            root.on = !root.on;
+            root.toggled(root.on);
+        }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " ") {
+                root.on = !root.on;
+                root.toggled(root.on);
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+// A settings row: title and one line of help on the left, switch on the right.
+export component ToggleRow inherits Rectangle {
+    in-out property <bool> on: false;
+    in property <bool> enabled: true;
+    in property <string> title;
+    in property <string> hint;
+    in property <bool> divider: true;
+    callback toggled(bool);
+    height: 56px;
+    Text {
+        x: 0px;
+        y: root.hint == "" ? 0px : 6px;
+        height: root.hint == "" ? parent.height : 22px;
+        width: parent.width - 64px;
+        text: root.title;
+        color: root.enabled ? Theme.text : Theme.dis-fg;
+        font-size: 14px;
+        vertical-alignment: center;
+    }
+    if root.hint != "": Text {
+        x: 0px;
+        y: 27px;
+        height: 18px;
+        width: parent.width - 64px;
+        text: root.hint;
+        color: root.enabled ? Theme.muted : Theme.dis-fg;
+        font-size: 12.5px;
+        vertical-alignment: center;
+    }
+    Toggle {
+        x: parent.width - 44px;
+        y: (parent.height - 44px) / 2;
+        on <=> root.on;
+        enabled: root.enabled;
+        toggled(v) => { root.toggled(v); }
+    }
+    if root.divider: Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.line;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Slider: 4 px track, 20 px thumb inside a 44 px hit area. The bubble shows while dragging or focused.
+// ---------------------------------------------------------------------------
+export component Slide inherits Rectangle {
+    in-out property <float> value: 0.5;     // 0..1
+    in property <bool> enabled: true;
+    in property <string> bubble;            // text for the bubble; empty draws none
+    in property <int> steps: 0;              // 0 = continuous, n = n+1 stops
+    in property <bool> force-hover: false;
+    in property <bool> force-drag: false;
+    in property <bool> force-focus: false;
+    callback changed(float);
+
+    property <bool> hov: (ta.has-hover || root.force-hover) && root.enabled;
+    property <bool> drag: (ta.pressed || root.force-drag) && root.enabled;
+    property <bool> focused: (fs.has-focus || root.force-focus) && root.enabled;
+    property <length> span: root.width - 20px;
+
+    height: 44px;
+    min-width: 80px;
+    opacity: root.enabled ? 1 : 0.45;
+
+    function snap(v: float) -> float {
+        root.steps > 0 ? Math.round(Math.clamp(v, 0, 1) * root.steps) / root.steps : Math.clamp(v, 0, 1)
+    }
+
+    Rectangle {
+        x: 10px;
+        y: 20px;
+        width: root.span;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.slider-track;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * root.value;
+            height: 100%;
+            border-radius: 2px;
+            background: Theme.ctl;
+        }
+    }
+    // halo and thumb
+    Rectangle {
+        x: 10px + root.span * root.value - 18px;
+        y: 4px;
+        width: 36px;
+        height: 36px;
+        border-radius: 18px;
+        background: root.drag ? Theme.halo : root.hov ? Theme.halo : transparent;
+        transform-scale: root.drag ? 1.0 : root.hov ? 0.8 : 0.6;
+        animate transform-scale { duration: Theme.dur-instant; easing: Theme.ease-std; }
+    }
+    Rectangle {
+        x: 10px + root.span * root.value - 10px;
+        y: 12px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: root.drag ? Theme.ctl-p : Theme.ctl;
+        drop-shadow-blur: 3px;
+        drop-shadow-offset-y: 1px;
+        drop-shadow-color: rgba(0, 0, 0, 0.28);
+        FocusRing { active: root.focused; corner: 10px; }
+    }
+    if root.bubble != "" && (root.drag || root.focused): Rectangle {
+        x: 10px + root.span * root.value - self.width / 2;
+        y: -32px;
+        width: Math.max(36px, bt.preferred-width + 16px);
+        height: 28px;
+        border-radius: 8px;
+        background: Theme.text;
+        bt := Text {
+            width: 100%;
+            height: 100%;
+            text: root.bubble;
+            color: Theme.panel;
+            font-size: 12.5px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            x: (parent.width - 8px) / 2;
+            y: parent.height - 5px;
+            width: 8px;
+            height: 8px;
+            background: Theme.text;
+            transform-rotation: 45deg;
+        }
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                root.value = root.snap((self.mouse-x - 10px) / root.span);
+                root.changed(root.value);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.value = root.snap((self.mouse-x - 10px) / root.span);
+                root.changed(root.value);
+            }
+        }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == Key.RightArrow || e.text == Key.UpArrow) {
+                root.value = root.snap(root.value + (root.steps > 0 ? 1.0 / root.steps : 0.01));
+                root.changed(root.value);
+                return accept;
+            }
+            if (e.text == Key.LeftArrow || e.text == Key.DownArrow) {
+                root.value = root.snap(root.value - (root.steps > 0 ? 1.0 / root.steps : 0.01));
+                root.changed(root.value);
+                return accept;
+            }
+            if (e.text == Key.Home) { root.value = 0; root.changed(0); return accept; }
+            if (e.text == Key.End) { root.value = 1; root.changed(1); return accept; }
+            return reject;
+        }
+    }
+}

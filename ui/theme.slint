@@ -1,0 +1,133 @@
+// Design tokens. One global so every component reads the same light and dark values.
+// Flip `Theme.dark` and the whole tree repaints.
+//
+// The values are the Malva UI kit's (tokens/malva-tokens.json in Malva-ui-toolkit): neutral greys, the logo's plum as the only
+// accent, Inter. Roles the kit does not have (sub, para, the translucent overlays) are neutral derivations. The resource colours
+// (cpu, mem, disk, net, gpu, start) are data colours that tell the nine widgets apart; they are not brand colours.
+
+import "fonts/Inter-Regular.otf";
+import "fonts/Inter-Medium.otf";
+import "fonts/Inter-SemiBold.otf";
+import "fonts/Inter-Bold.otf";
+import "fonts/JetBrainsMono-Regular.ttf";
+
+// Brand strings live here so a rename is a one-line change.
+export global Brand {
+    out property <string> os: "Malva";
+    out property <string> product: "Malva Widgets";
+    out property <string> host: "malva-desktop";
+    out property <string> compositor: "malva-compositor";
+    out property <string> shell: "malva-shell";
+    out property <string> version: "1.0.2";
+}
+
+export global Theme {
+    in-out property <bool> dark: false;
+
+    // ---- type ------------------------------------------------------------
+    out property <string> font: "Inter";
+    out property <string> mono: "JetBrains Mono";
+
+    // ---- surfaces ---------------------------------------------------------
+    out property <color> page: dark ? #161617 : #F5F5F7;
+    out property <color> panel: dark ? #1E1E1F : #FFFFFF;
+    out property <color> panel-glass: dark ? rgba(30, 30, 31, 0.76) : rgba(255, 255, 255, 0.74);
+    out property <color> stage: dark ? rgba(255, 255, 255, 0.045) : rgba(255, 255, 255, 0.55);
+    out property <color> card: dark ? rgba(255, 255, 255, 0.06) : rgba(255, 255, 255, 0.72);
+    out property <color> shadow: dark ? rgba(0, 0, 0, 0.50) : rgba(0, 0, 0, 0.12);
+    out property <color> shadow-menu: dark ? rgba(0, 0, 0, 0.60) : rgba(0, 0, 0, 0.18);
+    out property <color> shadow-dialog: dark ? rgba(0, 0, 0, 0.60) : rgba(0, 0, 0, 0.18);
+    out property <color> scrim: dark ? rgba(0, 0, 0, 0.65) : rgba(0, 0, 0, 0.32);
+
+    // ---- text -------------------------------------------------------------
+    out property <color> text: dark ? #F5F5F7 : #1D1D1F;
+    out property <color> sub: dark ? #D1D1D6 : #424245;
+    out property <color> muted: dark ? #8E8E93 : #86868B;
+    out property <color> para: dark ? #C7C7CC : #515154;
+    out property <color> dis-fg: dark ? #58585C : #C7C7CC;
+
+    // ---- lines and fills --------------------------------------------------
+    out property <color> line: dark ? rgba(255, 255, 255, 0.09) : rgba(29, 29, 31, 0.10);
+    out property <color> rule: dark ? rgba(255, 255, 255, 0.14) : rgba(29, 29, 31, 0.16);
+    out property <color> chip: dark ? rgba(255, 255, 255, 0.07) : rgba(29, 29, 31, 0.06);
+    out property <color> track: dark ? rgba(255, 255, 255, 0.10) : rgba(29, 29, 31, 0.09);
+    out property <color> grid: dark ? rgba(255, 255, 255, 0.08) : rgba(29, 29, 31, 0.08);
+    out property <color> hover: dark ? rgba(255, 255, 255, 0.09) : rgba(29, 29, 31, 0.07);
+    out property <color> hover2: dark ? rgba(255, 255, 255, 0.16) : rgba(29, 29, 31, 0.13);
+    out property <color> btn2: dark ? rgba(255, 255, 255, 0.12) : rgba(29, 29, 31, 0.08);
+    out property <color> btn2-h: dark ? rgba(255, 255, 255, 0.20) : rgba(29, 29, 31, 0.14);
+    out property <color> btn2-p: dark ? rgba(255, 255, 255, 0.28) : rgba(29, 29, 31, 0.20);
+    out property <color> dis-bg: dark ? rgba(255, 255, 255, 0.10) : rgba(29, 29, 31, 0.08);
+    out property <color> dis-line: dark ? rgba(255, 255, 255, 0.22) : rgba(29, 29, 31, 0.28);
+    out property <color> field: dark ? rgba(255, 255, 255, 0.45) : rgba(29, 29, 31, 0.55);
+    out property <color> field-h: dark ? rgba(255, 255, 255, 0.75) : rgba(29, 29, 31, 0.85);
+    out property <color> slider-track: dark ? rgba(255, 255, 255, 0.16) : rgba(29, 29, 31, 0.14);
+    out property <color> seg-bg: dark ? rgba(255, 255, 255, 0.08) : rgba(29, 29, 31, 0.07);
+    out property <color> seg-on: dark ? rgba(255, 255, 255, 0.28) : #FFFFFF;
+
+    // ---- accent and actions ----------------------------------------------
+    out property <color> focus: dark ? #F093D7 : #8C3274;
+    out property <color> accent: dark ? #DC73C2 : #8C3274;
+    out property <color> accent-text: dark ? #DC73C2 : #8C3274;
+    out property <color> accent-soft: dark ? rgba(220, 115, 194, 0.16) : rgba(140, 50, 116, 0.10);
+    out property <color> accent-soft-h: dark ? rgba(220, 115, 194, 0.22) : rgba(140, 50, 116, 0.16);
+    out property <color> primary: dark ? #DC73C2 : #8C3274;
+    out property <color> primary-h: dark ? #F093D7 : #5D2950;
+    out property <color> primary-p: dark ? #C75EAE : #47253F;
+    out property <color> danger-btn: dark ? #FF7A85 : #C42F3E;
+    out property <color> danger-btn-h: dark ? #E16A77 : #CE4C54;
+    out property <color> danger-btn-p: dark ? #D1636C : #A02531;
+    out property <color> ctl: dark ? #DC73C2 : #8C3274;
+    out property <color> ctl-h: dark ? #F093D7 : #5D2950;
+    out property <color> ctl-p: dark ? #C75EAE : #47253F;
+    out property <color> on-primary: dark ? #1D1D1F : #FFFFFF;      // text and icons on primary and ctl fills
+    out property <color> on-danger: dark ? #1D1D1F : #FFFFFF;       // text and icons on danger fills
+    out property <color> halo: dark ? rgba(220, 115, 194, 0.30) : rgba(140, 50, 116, 0.16);
+
+    // ---- status -----------------------------------------------------------
+    out property <color> ok: dark ? #7FD35A : #3F8A1E;
+    out property <color> ok-text: dark ? #7FD35A : #2F6D16;
+    out property <color> ok-soft: dark ? rgba(127, 211, 90, 0.20) : rgba(63, 138, 30, 0.18);
+    out property <color> warn: dark ? #FFB85C : #8A5300;
+    out property <color> warn-line: dark ? #FFB85C : #F2A33A;
+    out property <color> warn-soft: dark ? rgba(255, 184, 92, 0.20) : rgba(242, 163, 58, 0.22);
+    out property <color> danger: dark ? #FF7A85 : #C42F3E;
+    out property <color> danger-text: dark ? #FF7A85 : #C42F3E;
+    out property <color> danger-line: dark ? #FF7A85 : #D6414F;
+    out property <color> danger-soft: dark ? rgba(255, 122, 133, 0.20) : rgba(214, 65, 79, 0.12);
+    out property <color> info: dark ? #6BA3FF : #2F6FD6;
+    out property <color> off: dark ? #8E8E93 : #86868B;
+
+    // ---- resources (one color each) -----------------------------------------
+    out property <color> cpu: dark ? #6BA3FF : #2F6FD6;
+    out property <color> mem: dark ? #A78BFA : #7B57D6;
+    out property <color> disk: dark ? #7FD35A : #3F8A1E;
+    out property <color> net: dark ? #3FC1D6 : #16809A;
+    out property <color> gpu: dark ? #F27BAE : #D6407F;
+    out property <color> start: dark ? #FFB85C : #B26A00;
+    out property <color> procs: dark ? #6BA3FF : #2F6FD6;
+
+    // ---- radii -------------------------------------------------------------
+    out property <length> r-check: 6px;
+    out property <length> r-row: 10px;
+    out property <length> r-button: 10px;
+    out property <length> r-tile: 14px;
+    out property <length> r-card: 22px;
+    out property <length> r-dialog: 22px;
+    out property <length> r-panel: 22px;
+
+    // ---- motion ------------------------------------------------------------
+    out property <duration> dur-instant: 90ms;
+    out property <duration> dur-fast: 160ms;
+    out property <duration> dur-base: 240ms;
+    out property <duration> dur-slow: 380ms;
+    out property <duration> dur-slower: 500ms;
+    out property <easing> ease-std: cubic-bezier(0.2, 0, 0, 1);
+    out property <easing> ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    out property <easing> ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+    // Helper: the same color at another alpha (0..1).
+    pure public function fade(c: color, a: float) -> color {
+        c.with-alpha(a)
+    }
+}
