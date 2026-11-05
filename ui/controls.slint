@@ -20,6 +20,7 @@ export component Btn inherits Rectangle {
     in property <bool> enabled: true;
     in property <bool> busy: false;
     in property <bool> toggled: false;
+    in property <bool> quiet: false;          // ghost buttons only: muted label, for a way out that should not compete ("Skip setup")
     in property <bool> force-hover: false;
     in property <bool> force-pressed: false;
     in property <bool> force-focus: false;
@@ -50,9 +51,10 @@ export component Btn inherits Rectangle {
     animate transform-scale { duration: Theme.dur-instant; easing: Theme.ease-std; }
 
     property <color> fg: !root.enabled ? Theme.dis-fg
-        : root.solid ? (root.kind == BtnKind.danger ? Theme.on-danger : Theme.on-primary)
+        : root.solid ? #FFFFFF
         : root.kind == BtnKind.text ? (root.hov ? Theme.accent-text : Theme.accent)
         : root.kind == BtnKind.icon ? (root.icon-on ? Theme.accent : Theme.sub)
+        : root.kind == BtnKind.ghost && root.quiet ? Theme.muted
         : root.on ? Theme.accent-text
         : Theme.text;
 
@@ -87,6 +89,7 @@ export component Btn inherits Rectangle {
         clicked => { root.clicked(); }
     }
     fs := FocusScope {
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if (e.text == " " || e.text == "\n") {
@@ -150,7 +153,7 @@ export component CheckBox inherits Rectangle {
             viewbox-width: 16;
             viewbox-height: 16;
             commands: root.mixed ? "M4 8 L12 8" : "M3.6 8.4 L6.7 11.4 L12.6 4.8";
-            stroke: Theme.on-primary;
+            stroke: #FFFFFF;
             stroke-width: 2px;
             stroke-line-cap: round;
             stroke-line-join: round;
@@ -187,6 +190,7 @@ export component CheckBox inherits Rectangle {
         }
     }
     fs := FocusScope {
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if (e.text == " ") {
@@ -276,6 +280,7 @@ export component RadioDot inherits Rectangle {
         clicked => { root.picked(); }
     }
     fs := FocusScope {
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if (e.text == " ") {
@@ -322,7 +327,7 @@ export component Toggle inherits Rectangle {
             width: self.d;
             height: self.d;
             border-radius: self.d / 2;
-            background: root.on ? Theme.on-primary : root.hov ? Theme.field-h : Theme.field;
+            background: root.on ? #FFFFFF : root.hov ? Theme.field-h : Theme.field;
             animate x { duration: Theme.dur-fast; easing: Theme.ease-std; }
             animate width { duration: Theme.dur-fast; easing: Theme.ease-std; }
             animate height { duration: Theme.dur-fast; easing: Theme.ease-std; }
@@ -346,6 +351,7 @@ export component Toggle inherits Rectangle {
         }
     }
     fs := FocusScope {
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if (e.text == " ") {
@@ -509,6 +515,7 @@ export component Slide inherits Rectangle {
         }
     }
     fs := FocusScope {
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if (e.text == Key.RightArrow || e.text == Key.UpArrow) {

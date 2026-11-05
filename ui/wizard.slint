@@ -1,0 +1,470 @@
+// First-run wizard: four steps, each one can be skipped, and every choice can be changed later in Widget settings.
+// The window is 560 x 480. The close button, "Skip setup" and "Show my desktop" all close it; the dashed stub
+// that takes its place has "Show it again", which brings the window back on the step where it was.
+
+import { Theme, Brand } from "theme.slint";
+import { Icon, IconDef, Icons, Surface, Elevation, FocusRing } from "base.slint";
+import { Btn, BtnKind } from "controls.slint";
+import { ClosedStub } from "notify.slint";
+
+struct WizOpt { name: string, desc: string, icon: IconDef, col: color }
+
+// Colors only this window uses (the design gives them their own values for each theme).
+global WizInk {
+    out property <color> line2: Theme.dark ? rgba(255, 255, 255, 0.28) : rgba(50, 50, 56, 0.30);
+    out property <color> box: Theme.dark ? #3B7FEA : #2468D6;
+    out property <color> box-line: Theme.dark ? rgba(255, 255, 255, 0.45) : rgba(50, 50, 56, 0.55);
+    out property <color> dot: Theme.dark ? rgba(255, 255, 255, 0.22) : rgba(50, 50, 56, 0.20);
+    out property <color> sw-off: Theme.dark ? rgba(255, 255, 255, 0.28) : rgba(50, 50, 56, 0.38);
+    out property <color> accent-soft: Theme.fade(Theme.accent, 0.16);
+    out property <color> ok-soft: Theme.fade(Theme.dark ? #4CC38A : #1F8A57, 0.16);
+    out property <color> row-h: Theme.chip;
+}
+
+// ---------------------------------------------------------------------------
+// A widget the person can tick (step 2). The whole card is the checkbox.
+// ---------------------------------------------------------------------------
+component WizCard inherits Rectangle {
+    in property <string> name;
+    in property <string> desc;
+    in property <IconDef> icon;
+    in property <color> hue;
+    in property <bool> on;
+    callback toggled();
+
+    height: 62px;
+    border-radius: 12px;
+    background: root.on ? WizInk.accent-soft : ta.has-hover ? WizInk.row-h : transparent;
+    animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+    accessible-role: AccessibleRole.checkbox;
+    accessible-label: root.name + ". " + root.desc;
+    accessible-checked: root.on;
+    accessible-action-default => { root.toggled(); }
+
+    Rectangle { x: 0px; y: 0px; width: parent.width; height: parent.height; border-radius: 12px; border-width: 1.5px; border-color: root.on ? Theme.accent : WizInk.line2; background: transparent; }
+    Rectangle {
+        x: 12px;
+        y: 13px;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: Theme.fade(root.hue, 0.16);
+        Icon { icon: root.icon; size: 16px; tint: root.hue; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+    }
+    Text { x: 60px; y: 11px; width: root.width - 100px; height: 20px; text: root.name; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; overflow: elide; }
+    Text { x: 60px; y: 31px; width: root.width - 100px; height: 18px; text: root.desc; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; overflow: elide; }
+    Rectangle {
+        x: root.width - 32px;
+        y: 21px;
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        border-width: 2px;
+        border-color: root.on ? WizInk.box : WizInk.box-line;
+        background: root.on ? WizInk.box : transparent;
+    }
+    if root.on: Icon { icon: Icons.check; size: 11px; tint: #FFFFFF; x: root.width - 32px + 4.5px; y: 25.5px; }
+    ta := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.toggled(); }
+    }
+    fs := FocusScope {
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.toggled();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    FocusRing { active: fs.has-focus; corner: 12px; }
+}
+
+// ---------------------------------------------------------------------------
+// A look (step 3): a small picture of the widgets, then a radio and its name.
+// kind 0 light, 1 dark, 2 match system (half and half).
+// ---------------------------------------------------------------------------
+component LookCard inherits Rectangle {
+    in property <string> label;
+    in property <int> kind;
+    in property <bool> on;
+    callback picked();
+
+    height: 140px;
+    border-radius: 14px;
+    background: root.on ? WizInk.accent-soft : ta.has-hover ? WizInk.row-h : transparent;
+    animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+    accessible-role: AccessibleRole.radio-button;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+    accessible-action-default => { root.picked(); }
+
+    Rectangle { x: 0px; y: 0px; width: parent.width; height: parent.height; border-radius: 14px; border-width: 2px; border-color: root.on ? Theme.accent : WizInk.line2; background: transparent; }
+    Rectangle {
+        x: 8px;
+        y: 8px;
+        width: parent.width - 16px;
+        height: 84px;
+        border-radius: 8px;
+        clip: true;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: root.kind == 2 ? parent.width / 2 : parent.width;
+            height: parent.height;
+            background: root.kind == 1 ? #1E1F24 : #E6E9F0;
+            Rectangle {
+                x: 8px;
+                y: 17px;
+                width: parent.width - 16px;
+                height: 22px;
+                border-radius: 6px;
+                background: root.kind == 1 ? #2C2C2D : #FFFFFF;
+                Rectangle { x: 6px; y: 8px; width: parent.width * 0.4; height: 6px; border-radius: 3px; background: Theme.cpu; }
+            }
+            Rectangle {
+                x: 8px;
+                y: 45px;
+                width: parent.width - 16px;
+                height: 22px;
+                border-radius: 6px;
+                background: root.kind == 1 ? #2C2C2D : #FFFFFF;
+                Rectangle { x: 6px; y: 8px; width: parent.width * 0.6; height: 6px; border-radius: 3px; background: Theme.mem; }
+            }
+        }
+        if root.kind == 2: Rectangle {
+            x: parent.width / 2;
+            y: 0px;
+            width: parent.width / 2;
+            height: parent.height;
+            background: #1E1F24;
+            Rectangle {
+                x: 8px;
+                y: 17px;
+                width: parent.width - 16px;
+                height: 22px;
+                border-radius: 6px;
+                background: #2C2C2D;
+                Rectangle { x: 6px; y: 8px; width: parent.width * 0.4; height: 6px; border-radius: 3px; background: #5CA0FF; }
+            }
+            Rectangle {
+                x: 8px;
+                y: 45px;
+                width: parent.width - 16px;
+                height: 22px;
+                border-radius: 6px;
+                background: #2C2C2D;
+                Rectangle { x: 6px; y: 8px; width: parent.width * 0.6; height: 6px; border-radius: 3px; background: #A78BFA; }
+            }
+        }
+    }
+    Rectangle { x: 8px; y: 109px; width: 18px; height: 18px; border-radius: 9px; border-width: 2px; border-color: root.on ? WizInk.box : WizInk.box-line; background: transparent; }
+    Rectangle { x: 13px; y: 114px; width: 8px; height: 8px; border-radius: 4px; background: root.on ? WizInk.box : transparent; }
+    Text { x: 34px; y: 100px; width: root.width - 42px; height: 36px; text: root.label; color: Theme.text; font-size: 13.5px; font-weight: 600; vertical-alignment: center; overflow: elide; }
+    ta := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.picked(); }
+    }
+    fs := FocusScope {
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.picked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    FocusRing { active: fs.has-focus; corner: 14px; }
+}
+
+// 44 px close button in the corner
+component CloseX inherits Rectangle {
+    callback clicked();
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: ta.pressed ? Theme.hover2 : ta.has-hover ? WizInk.row-h : transparent;
+    animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+    accessible-role: AccessibleRole.button;
+    accessible-label: "Close and skip setup";
+    accessible-action-default => { root.clicked(); }
+    Icon { icon: Icons.xmark; size: 14px; tint: Theme.muted; x: 15px; y: 15px; }
+    ta := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+    fs := FocusScope {
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    FocusRing { active: fs.has-focus; corner: 10px; }
+}
+
+// ---------------------------------------------------------------------------
+// The wizard. step 1 Welcome, 2 Choose widgets, 3 Pick a look, 4 Ready.
+// ---------------------------------------------------------------------------
+export component WizardDialog inherits Rectangle {
+    in-out property <int> step: 1;
+    in-out property <[bool]> pick: [true, true, false, false, false];
+    in-out property <int> look: 0;                 // 0 light, 1 dark, 2 match system
+    in-out property <bool> glass: false;
+    in-out property <bool> closed: false;
+    callback finished();                           // "Show my desktop"
+    callback skipped();                            // close button or "Skip setup"
+
+    property <[WizOpt]> opts: [
+        { name: "CPU", desc: "Load and speed", icon: Icons.microchip, col: Theme.cpu },
+        { name: "Memory", desc: "In use and free", icon: Icons.memory, col: Theme.mem },
+        { name: "Disk", desc: "Space and activity", icon: Icons.hard-drive, col: Theme.disk },
+        { name: "Network", desc: "Download and upload", icon: Icons.wifi, col: Theme.net },
+        { name: "GPU", desc: "Load and memory", icon: Icons.display, col: Theme.gpu },
+    ];
+    property <int> n-pick: (root.pick[0] ? 1 : 0) + (root.pick[1] ? 1 : 0) + (root.pick[2] ? 1 : 0) + (root.pick[3] ? 1 : 0) + (root.pick[4] ? 1 : 0);
+    // "CPU, Memory" built one name at a time because Slint has no loops in expressions
+    property <string> s0: root.pick[0] ? "CPU" : "";
+    property <string> s1: root.pick[1] ? (root.s0 == "" ? "Memory" : root.s0 + ", Memory") : root.s0;
+    property <string> s2: root.pick[2] ? (root.s1 == "" ? "Disk" : root.s1 + ", Disk") : root.s1;
+    property <string> s3: root.pick[3] ? (root.s2 == "" ? "Network" : root.s2 + ", Network") : root.s2;
+    property <string> s4: root.pick[4] ? (root.s3 == "" ? "GPU" : root.s3 + ", GPU") : root.s3;
+    property <string> count-text: root.n-pick == 0 ? "Nothing selected. You can add widgets later."
+        : root.n-pick == 1 ? "1 widget selected" : root.n-pick + " widgets selected";
+
+    function leave(done: bool) {
+        root.closed = true;
+        if (done) {
+            root.finished();
+        } else {
+            root.skipped();
+        }
+    }
+
+    width: 560px;
+    height: root.closed ? 132px : 480px;      // the stub is shorter than the window
+
+    if root.closed: ClosedStub {
+        x: 0px;
+        y: 0px;
+        width: 560px;
+        height: 132px;
+        radius: 16px;
+        line1: "Window closed";
+        reopen => { root.closed = false; }
+    }
+
+    if !root.closed: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        accessible-role: AccessibleRole.groupbox;
+        accessible-label: "Welcome to " + Brand.product;
+
+        Surface { x: 0px; y: 0px; width: parent.width; height: parent.height; elevation: Elevation.dialog; radius: 16px; }
+
+        // ---- 1 Welcome ---------------------------------------------------------------------
+        if root.step == 1: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            Rectangle {
+                x: 244px;
+                y: 40px;
+                width: 72px;
+                height: 72px;
+                border-radius: 20px;
+                background: WizInk.accent-soft;
+                Icon { icon: Icons.leaf; size: 34px; tint: Theme.accent; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+            }
+            Text { x: 40px; y: 128px; width: 480px; height: 32px; text: "Welcome to " + Brand.product; color: Theme.text; font-size: 24px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 90px; y: 166px; width: 380px; height: 44px; text: "Small live panels that show how your computer is doing. It takes a minute to set up."; wrap: TextWrap.word-wrap; color: Theme.sub; font-size: 14.5px; horizontal-alignment: center; }
+            Rectangle { x: 40px; y: 232px; width: 480px; height: 1px; background: Theme.line; }
+            Rectangle {
+                x: 40px;
+                y: 241px;
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                background: Theme.chip;
+                Icon { icon: Icons.gauge-high; size: 16px; tint: Theme.accent; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+            }
+            Text { x: 90px; y: 233px; width: 430px; height: 51px; text: "See how busy your computer is at a glance"; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+            Rectangle { x: 40px; y: 284px; width: 480px; height: 1px; background: Theme.line; }
+            Rectangle {
+                x: 40px;
+                y: 293px;
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                background: Theme.chip;
+                Icon { icon: Icons.sliders; size: 16px; tint: Theme.accent; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+            }
+            Text { x: 90px; y: 285px; width: 430px; height: 51px; text: "Choose sizes, colors and warning levels"; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+            Rectangle { x: 40px; y: 336px; width: 480px; height: 1px; background: Theme.line; }
+            Rectangle {
+                x: 40px;
+                y: 345px;
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                background: Theme.chip;
+                Icon { icon: Icons.arrows-up-down-left-right; size: 16px; tint: Theme.accent; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+            }
+            Text { x: 90px; y: 337px; width: 430px; height: 51px; text: "Place them anywhere on the desktop"; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+        }
+
+        // ---- 2 Choose widgets --------------------------------------------------------------
+        if root.step == 2: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            Text { x: 40px; y: 40px; width: 480px; height: 30px; text: "Choose your first widgets"; color: Theme.text; font-size: 22px; font-weight: 600; vertical-alignment: center; }
+            Text { x: 40px; y: 74px; width: 480px; height: 21px; text: "Pick as many as you like. You can add or remove them any time."; color: Theme.sub; font-size: 14px; vertical-alignment: center; }
+            for opt[i] in root.opts: WizCard {
+                x: 40px + Math.mod(i, 2) * 245px;
+                y: 111px + Math.floor(i / 2) * 72px;
+                width: 235px;
+                name: opt.name;
+                desc: opt.desc;
+                icon: opt.icon;
+                hue: opt.col;
+                on: root.pick[i];
+                toggled => { root.pick[i] = !root.pick[i]; }
+            }
+            Text { x: 40px; y: 327px; width: 480px; height: 18px; text: root.count-text; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+        }
+
+        // ---- 3 Pick a look -----------------------------------------------------------------
+        if root.step == 3: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            Text { x: 40px; y: 40px; width: 480px; height: 30px; text: "Pick a look"; color: Theme.text; font-size: 22px; font-weight: 600; vertical-alignment: center; }
+            Text { x: 40px; y: 74px; width: 480px; height: 21px; text: "Widgets can be light, dark, or follow your system."; color: Theme.sub; font-size: 14px; vertical-alignment: center; }
+            LookCard { x: 40px; y: 111px; width: 152px; kind: 0; label: "Light"; on: root.look == 0; picked => { root.look = 0; } }
+            LookCard { x: 204px; y: 111px; width: 152px; kind: 1; label: "Dark"; on: root.look == 1; picked => { root.look = 1; } }
+            LookCard { x: 368px; y: 111px; width: 152px; kind: 2; label: "Match system"; on: root.look == 2; picked => { root.look = 2; } }
+            Rectangle {
+                x: 40px;
+                y: 263px;
+                width: 480px;
+                height: 56px;
+                border-radius: 12px;
+                background: gta.has-hover ? WizInk.row-h : transparent;
+                animate background { duration: Theme.dur-instant; easing: Theme.ease-std; }
+                accessible-role: AccessibleRole.switch;
+                accessible-label: "Glass background. See your wallpaper through the widgets.";
+                accessible-checked: root.glass;
+                accessible-action-default => { root.glass = !root.glass; }
+                Text { x: 12px; y: 9px; width: 380px; height: 20px; text: "Glass background"; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
+                Text { x: 12px; y: 29px; width: 380px; height: 18px; text: "See your wallpaper through the widgets."; color: Theme.muted; font-size: 12.5px; vertical-alignment: center; }
+                Rectangle { x: 428px; y: 17px; width: 40px; height: 22px; border-radius: 11px; background: root.glass ? WizInk.box : WizInk.sw-off; animate background { duration: Theme.dur-fast; easing: Theme.ease-std; } }
+                Rectangle {
+                    x: root.glass ? 448px : 430px;
+                    y: 19px;
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    background: #FFFFFF;
+                    drop-shadow-color: rgba(0, 0, 0, 0.30);
+                    drop-shadow-blur: 2px;
+                    drop-shadow-offset-y: 1px;
+                    animate x { duration: Theme.dur-fast; easing: Theme.ease-std; }
+                }
+                gta := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => { root.glass = !root.glass; }
+                }
+                gfs := FocusScope {
+                    focus-on-click: false;
+                    key-pressed(e) => {
+                        if (e.text == " " || e.text == "\n") {
+                            root.glass = !root.glass;
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+                FocusRing { active: gfs.has-focus; corner: 12px; }
+            }
+        }
+
+        // ---- 4 Ready -----------------------------------------------------------------------
+        if root.step == 4: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            Rectangle {
+                x: 244px;
+                y: 40px;
+                width: 72px;
+                height: 72px;
+                border-radius: 36px;
+                background: WizInk.ok-soft;
+                Icon { icon: Icons.circle-check; size: 34px; tint: Theme.ok; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+            }
+            Text { x: 40px; y: 128px; width: 480px; height: 32px; text: "You are ready"; color: Theme.text; font-size: 24px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 90px; y: 166px; width: 380px; height: 44px; text: "Your widgets are on the desktop. Drag one to move it, or press E to edit the layout."; wrap: TextWrap.word-wrap; color: Theme.sub; font-size: 14.5px; horizontal-alignment: center; }
+            Rectangle { x: 40px; y: 230px; width: 480px; height: 1px; background: Theme.line; }
+            Text { x: 40px; y: 231px; width: 150px; height: 43px; text: "Widgets"; color: Theme.muted; font-size: 14px; vertical-alignment: center; }
+            Text { x: 200px; y: 231px; width: 320px; height: 43px; text: root.s4 == "" ? "None yet" : root.s4; color: Theme.text; font-size: 14px; font-weight: 600; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+            Rectangle { x: 40px; y: 274px; width: 480px; height: 1px; background: Theme.line; }
+            Text { x: 40px; y: 275px; width: 150px; height: 43px; text: "Look"; color: Theme.muted; font-size: 14px; vertical-alignment: center; }
+            Text { x: 200px; y: 275px; width: 320px; height: 43px; text: root.look == 0 ? "Light" : root.look == 1 ? "Dark" : "Match system"; color: Theme.text; font-size: 14px; font-weight: 600; horizontal-alignment: right; vertical-alignment: center; }
+            Rectangle { x: 40px; y: 318px; width: 480px; height: 1px; background: Theme.line; }
+            Text { x: 40px; y: 319px; width: 200px; height: 43px; text: "Glass background"; color: Theme.muted; font-size: 14px; vertical-alignment: center; }
+            Text { x: 200px; y: 319px; width: 320px; height: 43px; text: root.glass ? "On" : "Off"; color: Theme.text; font-size: 14px; font-weight: 600; horizontal-alignment: right; vertical-alignment: center; }
+        }
+
+        // ---- footer: step dots, then the buttons -------------------------------------------
+        HorizontalLayout {
+            x: 40px;
+            y: 412px;
+            width: 496px;
+            height: 44px;
+            spacing: 12px;
+            Rectangle {
+                horizontal-stretch: 1;
+                accessible-role: AccessibleRole.text;
+                accessible-label: "Step " + root.step + " of 4";
+                for n in 4: Rectangle {
+                    // every dot is 8 px and 6 px apart; the current one is 22 px, which pushes the ones after it 14 px along
+                    x: n * 14px + (n >= root.step ? 14px : 0px);
+                    y: 18px;
+                    width: root.step == n + 1 ? 22px : 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.step == n + 1 ? Theme.accent : WizInk.dot;
+                    animate x { duration: Theme.dur-fast; easing: Theme.ease-std; }
+                    animate width { duration: Theme.dur-fast; easing: Theme.ease-std; }
+                }
+            }
+            if root.step < 4: Btn { kind: BtnKind.ghost; quiet: true; text: "Skip setup"; clicked => { root.leave(false); } }
+            if root.step > 1: Btn { kind: BtnKind.secondary; text: "Back"; clicked => { root.step = root.step - 1; } }
+            Btn {
+                kind: BtnKind.primary;
+                text: root.step == 1 ? "Get started" : root.step == 4 ? "Show my desktop" : "Next";
+                clicked => {
+                    if (root.step == 4) {
+                        root.leave(true);
+                    } else {
+                        root.step = root.step + 1;
+                    }
+                }
+            }
+        }
+
+        CloseX { x: parent.width - 52px; y: 8px; clicked => { root.leave(false); } }
+    }
+}
